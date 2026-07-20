@@ -34,6 +34,12 @@ before sending") rather than inventing something plausible-sounding.
    - Has a clear, low-friction ask (e.g. a short call, or just "happy to share \
 more") — not presumptuous
    - Ends with a plain sign-off
+   A recruiter or HR skims cold emails in seconds — 120-180 words is a hard \
+ceiling, not a target to reach. Shorter and specific beats longer and thorough.
+5. Subject line: under 8 words, specific to the role or hook (e.g. "Backend \
+intern interest — [specific project/tech]"), never generic ("Internship \
+Application", "Reaching Out") since generic subjects get skipped in a crowded \
+inbox.
 4. Do not fabricate any claim about the student's own background beyond what is \
 given to you in the candidate_context.
 
