@@ -1,8 +1,8 @@
 """
 This is the core of the "clever email" idea, scoped honestly:
-Claude researches the company via web search, finds 2-3 concrete,
-verifiable facts, and drafts a hook + email around them. The output
-ALWAYS lands as pending_review — nothing here sends anything.
+Gemini researches the company via Google Search grounding, finds 2-3
+concrete, verifiable facts, and drafts a hook + email around them.
+The output ALWAYS lands as pending_review — nothing here sends anything.
 
 If the research turns up nothing solid, drafting should say so rather
 than inventing a fact. That instruction is baked into the prompt below.
@@ -10,16 +10,17 @@ than inventing a fact. That instruction is baked into the prompt below.
 import json
 import re
 
-import anthropic
+from google import genai
+from google.genai import types
 
 import config
 from db import get_connection
 
 SYSTEM_PROMPT = """You are helping a first-year engineering student draft a cold \
-outreach email to a company for an internship. You have web search available.
+outreach email to a company for an internship. You have Google Search available.
 
 Steps:
-1. Research the company (and the specific job posting if given) using web search. \
+1. Research the company (and the specific job posting if given) using search. \
 Look for something concrete and current: a recent product launch, a specific \
 technology they use, a blog post, an engineering challenge they've talked about. \
 Do NOT use generic praise ("I admire your innovative culture") — that is worse \
@@ -69,25 +70,24 @@ def _extract_json(text: str) -> dict:
 
 def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
     """
-    Calls Claude with web search enabled, returns dict with
+    Calls Gemini with Google Search grounding enabled, returns dict with
     hook, subject, body, research_notes. Does NOT write to the DB.
     """
-    config.require_anthropic_key()
-    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    config.require_gemini_key()
+    client = genai.Client(api_key=config.GEMINI_API_KEY)
 
-    response = client.messages.create(
-        model=config.CLAUDE_MODEL,
-        max_tokens=1500,
-        system=SYSTEM_PROMPT,
-        tools=[{"type": "web_search_20250305", "name": "web_search"}],
-        messages=[
-            {"role": "user", "content": _build_user_prompt(company, contact, candidate_context)}
-        ],
+    user_prompt = _build_user_prompt(company, contact, candidate_context)
+
+    response = client.models.generate_content(
+        model=config.GEMINI_MODEL,
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+        ),
     )
 
-    # Pull out the final text block (after any tool-use turns)
-    text_blocks = [b.text for b in response.content if b.type == "text"]
-    full_text = "\n".join(text_blocks)
+    full_text = response.text or ""
 
     try:
         return _extract_json(full_text)

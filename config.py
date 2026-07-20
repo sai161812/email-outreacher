@@ -12,9 +12,9 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "outreach.db"
 RESUME_DIR = BASE_DIR / "resumes"
 
-# --- Anthropic API (used for research + drafting) ---
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = "claude-sonnet-5"
+# --- Gemini API (used for research + drafting) ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = "gemini-2.5-flash"
 
 # --- Gmail SMTP sending ---
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS", "")
@@ -31,10 +31,11 @@ MAX_DELAY_SECONDS = int(os.getenv("MAX_DELAY_SECONDS", "240"))
 FOLLOW_UP_AFTER_DAYS = int(os.getenv("FOLLOW_UP_AFTER_DAYS", "7"))
 
 
-def require_anthropic_key():
-    if not ANTHROPIC_API_KEY:
+def require_gemini_key():
+    if not GEMINI_API_KEY:
         raise RuntimeError(
-            "ANTHROPIC_API_KEY not set. Add it to your .env file."
+            "GEMINI_API_KEY not set. Add it to your .env file.\n"
+            "Get one at: https://aistudio.google.com/apikey"
         )
 
 
