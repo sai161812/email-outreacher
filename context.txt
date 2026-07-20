@@ -1,0 +1,57 @@
+CANDIDATE: Sai Prasad
+
+B.Tech student, Artificial Intelligence & Data Science. Looking for internships
+where I can contribute by building real software and learning from experienced
+engineers.
+
+BACKGROUND:
+Self-taught builder, not certificate-driven. I learn a concept by immediately
+implementing it in a real project rather than following tutorials. I care about
+understanding systems from first principles, not just calling APIs.
+
+TECHNICAL SKILLS:
+Languages: Python, JavaScript, TypeScript, C, SQL (also HTML/CSS)
+Backend/Infra: FastAPI, REST APIs, SQLite, MySQL, Linux, Git/GitHub
+Frontend: React, Vite
+AI/ML: Transformers, Hugging Face, LLM APIs, Whisper, prompt engineering,
+vector embeddings, semantic search
+Interests: AI agents, LLMs, deep learning, backend development, automation,
+system design, research engineering. Secondary interest in cybersecurity and
+developer tools.
+
+PROJECTS:
+1. AI Research Platform — a multi-agent system that understands a user's
+   research query, searches Semantic Scholar and arXiv, ranks results,
+   generates summaries and citations, and combines multiple AI agents into
+   one workflow. Built with LLM APIs, React, Vite. Focus was on agent
+   architecture and making it genuinely usable, not just a demo.
+
+2. Voice-Controlled AI Assistant — a desktop assistant with wake-word
+   detection, speech recognition, natural language understanding, system
+   command execution, and text-to-speech, all running with local processing
+   rather than wrapping an existing assistant.
+
+3. Internship Automation Platform — currently building an AI-powered
+   internship outreach system: researches a company, generates a
+   personalized hook, drafts a customized email, and manages sending under
+   rate limits, with a human review step before anything goes out.
+
+WORK STYLE:
+I iterate quickly, spend real time debugging instead of giving up on a hard
+problem, and actively look for a better solution instead of settling for the
+first one that works. When I don't know something, I learn it rather than
+avoid it.
+
+WHAT I'M LOOKING FOR:
+An internship where I can write real production-quality code, learn
+engineering best practices from experienced developers, work on features
+that matter, and get direct feedback. Open to AI/ML, backend, or general
+software engineering internships.
+
+TONE GUIDANCE FOR THE EMAIL:
+Confident but humble. Do not claim years of professional experience or
+exaggerate seniority. Do not use generic lines like "I am passionate about
+technology" unless backed by one of the concrete projects above. Lead with
+genuine curiosity and real project experience, not my college year. Wherever
+possible, connect the specific hook about the company to one of these three
+projects or to my AI/backend interests — not a generic connection.
