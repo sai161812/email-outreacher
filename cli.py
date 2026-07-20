@@ -70,6 +70,32 @@ def cmd_compose(args):
     print(f"Drafted email #{eid} — run 'review' to check it before sending.")
 
 
+def cmd_import_csv(args):
+    try:
+        summary = contacts.import_csv(args.file)
+    except FileNotFoundError:
+        print(f"Import failed: no file found at '{args.file}'")
+        return
+    except ValueError as e:
+        print(f"Import failed: {e}")
+        return
+    print(f"Companies created: {summary['companies_created']}")
+    print(f"Contacts created: {summary['contacts_created']}")
+    if summary["errors"]:
+        print(f"Skipped {len(summary['errors'])} row(s):")
+        for row_num, reason in summary["errors"]:
+            print(f"  row {row_num}: {reason}")
+
+
+def cmd_follow_up(args):
+    try:
+        eid = composer.compose_follow_up_and_store(args.email)
+    except ValueError as e:
+        print(f"Could not draft follow-up: {e}")
+        return
+    print(f"Drafted follow-up email #{eid} (for original #{args.email}) — run 'review' to check it.")
+
+
 def cmd_review(args):
     pending = reviewer.list_pending()
     if not pending:
@@ -155,6 +181,10 @@ def build_parser():
     a.add_argument("--source")
     a.set_defaults(func=cmd_add_contact)
 
+    a = sub.add_parser("import-csv")
+    a.add_argument("--file", required=True, help="path to CSV file (see companies_template.csv)")
+    a.set_defaults(func=cmd_import_csv)
+
     sub.add_parser("list-companies").set_defaults(func=cmd_list_companies)
 
     a = sub.add_parser("list-contacts")
@@ -195,6 +225,10 @@ def build_parser():
     a.set_defaults(func=cmd_mark)
 
     sub.add_parser("follow-ups").set_defaults(func=cmd_follow_ups)
+
+    a = sub.add_parser("follow-up")
+    a.add_argument("--email", type=int, required=True, help="ID of the original SENT email to follow up on")
+    a.set_defaults(func=cmd_follow_up)
 
     return p
 

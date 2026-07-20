@@ -108,6 +108,99 @@ def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
         }
 
 
+FOLLOW_UP_SYSTEM_PROMPT = """You are helping a first-year engineering student write a \
+brief follow-up to a cold outreach email they sent earlier that got no reply.
+
+Rules:
+- 40-70 words MAXIMUM. This is a nudge, not a new pitch — brevity is the entire point.
+- Reference the original email briefly (e.g. "Following up on my note from last week \
+about...") rather than restating the whole pitch.
+- Add ONE small new piece of value if possible (e.g. "since then I also..."), but if \
+there is nothing new, that is fine — do not pad with filler.
+- Stay low-pressure and polite. No guilt-tripping, no "just checking in" repeated \
+more than once, no fake urgency.
+- Do not re-explain who the student is in detail — assume the reader either read the \
+first email or will scroll down to it.
+
+Respond with ONLY valid JSON, no markdown fences, no preamble, in this exact shape:
+{"subject": "...", "body": "..."}
+
+subject should typically be "Re: <original subject>" unless that reads awkwardly.
+"""
+
+
+def compose_follow_up(original_email_id: int) -> dict:
+    """
+    Drafts a short follow-up referencing an already-sent email, rather
+    than re-researching the company from scratch. Does NOT write to the DB.
+    """
+    config.require_gemini_key()
+    client = genai.Client(api_key=config.GEMINI_API_KEY)
+
+    with get_connection() as conn:
+        original = conn.execute(
+            "SELECT * FROM emails WHERE id = ?", (original_email_id,)
+        ).fetchone()
+    if not original:
+        raise ValueError(f"No email found with id {original_email_id}")
+    original = dict(original)
+
+    user_prompt = (
+        f"Original subject: {original.get('subject')}\n"
+        f"Original body:\n{original.get('body')}\n"
+        f"Original hook used: {original.get('hook')}\n"
+    )
+
+    response = client.models.generate_content(
+        model=config.GEMINI_MODEL,
+        contents=user_prompt,
+        config=types.GenerateContentConfig(system_instruction=FOLLOW_UP_SYSTEM_PROMPT),
+    )
+
+    full_text = response.text or ""
+    try:
+        result = _extract_json(full_text)
+    except json.JSONDecodeError:
+        result = {
+            "subject": "(needs manual fix)",
+            "body": full_text,
+        }
+    result["hook"] = original.get("hook")  # carry the original hook forward for reference
+    return result
+
+
+def compose_follow_up_and_store(original_email_id: int) -> int:
+    from db import get_connection as _get_connection
+
+    with get_connection() as conn:
+        original = conn.execute(
+            "SELECT * FROM emails WHERE id = ?", (original_email_id,)
+        ).fetchone()
+    if not original:
+        raise ValueError(f"No email found with id {original_email_id}")
+    original = dict(original)
+
+    if original["status"] not in ("sent", "replied", "ghosted"):
+        raise ValueError(
+            f"Email #{original_email_id} has status '{original['status']}' — "
+            "follow-ups are only for emails that were actually sent."
+        )
+
+    result = compose_follow_up(original_email_id)
+
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO emails (company_id, contact_id, resume_variant_id, "
+            "follow_up_to_email_id, hook, subject, body, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_review')",
+            (
+                original["company_id"], original["contact_id"], original["resume_variant_id"],
+                original_email_id, result.get("hook"), result.get("subject"), result.get("body"),
+            ),
+        )
+        return cur.lastrowid
+
+
 def compose_and_store(company_id: int, contact_id: int, candidate_context: str,
                        resume_variant_id: int = None) -> int:
     from contacts import get_company, get_contact  # local import avoids circularity

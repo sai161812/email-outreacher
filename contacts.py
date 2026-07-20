@@ -2,7 +2,15 @@
 CRUD for companies and contacts. Deliberately simple — no ORM,
 just SQL, because this doesn't need more than that.
 """
+import csv
+
 from db import get_connection
+
+CSV_REQUIRED_COLUMNS = ["company_name", "contact_email"]
+CSV_OPTIONAL_COLUMNS = [
+    "domain", "job_url", "notes",
+    "contact_name", "contact_title", "contact_source",
+]
 
 
 def add_company(name, domain=None, job_url=None, job_text=None, notes=None):
@@ -23,6 +31,83 @@ def add_contact(company_id, email, name=None, title=None, source=None):
             (company_id, email, name, title, source),
         )
         return cur.lastrowid
+
+
+def find_company_by_name(name):
+    """Used by CSV import to avoid creating duplicate company rows when
+    the same company appears on multiple CSV rows (multiple contacts)."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM companies WHERE name = ? COLLATE NOCASE", (name,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def import_csv(file_path):
+    """
+    Bulk-add companies + contacts from a CSV file. You still have to
+    source each contact yourself — this only removes the one-command-
+    per-field typing, not the research step.
+
+    Required columns: company_name, contact_email
+    Optional columns: domain, job_url, notes, contact_name, contact_title,
+    contact_source
+
+    One row per contact. If the same company_name appears on multiple
+    rows, only one company record is created and each row adds another
+    contact under it.
+
+    Returns a summary dict: {"companies_created": int, "contacts_created": int,
+    "errors": [list of (row_number, reason)]}
+    """
+    summary = {"companies_created": 0, "contacts_created": 0, "errors": []}
+    company_cache = {}  # name.lower() -> company_id, scoped to this import run
+
+    with open(file_path, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+
+        missing = [c for c in CSV_REQUIRED_COLUMNS if c not in reader.fieldnames]
+        if missing:
+            raise ValueError(
+                f"CSV is missing required column(s): {', '.join(missing)}. "
+                f"Required: {', '.join(CSV_REQUIRED_COLUMNS)}"
+            )
+
+        for i, row in enumerate(reader, start=2):  # row 1 is the header
+            name = (row.get("company_name") or "").strip()
+            email = (row.get("contact_email") or "").strip()
+
+            if not name or not email:
+                summary["errors"].append((i, "missing company_name or contact_email"))
+                continue
+
+            cache_key = name.lower()
+            if cache_key in company_cache:
+                company_id = company_cache[cache_key]
+            else:
+                existing = find_company_by_name(name)
+                if existing:
+                    company_id = existing["id"]
+                else:
+                    company_id = add_company(
+                        name=name,
+                        domain=(row.get("domain") or "").strip() or None,
+                        job_url=(row.get("job_url") or "").strip() or None,
+                        notes=(row.get("notes") or "").strip() or None,
+                    )
+                    summary["companies_created"] += 1
+                company_cache[cache_key] = company_id
+
+            add_contact(
+                company_id,
+                email,
+                name=(row.get("contact_name") or "").strip() or None,
+                title=(row.get("contact_title") or "").strip() or None,
+                source=(row.get("contact_source") or "").strip() or None,
+            )
+            summary["contacts_created"] += 1
+
+    return summary
 
 
 def get_company(company_id):
