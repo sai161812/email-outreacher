@@ -7,7 +7,7 @@ import random
 import smtplib
 import ssl
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
@@ -90,7 +90,7 @@ def run_send_batch(dry_run=False):
             with get_connection() as conn:
                 conn.execute(
                     "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ?",
-                    (datetime.utcnow().isoformat(), datetime.utcnow().isoformat(), item["id"]),
+                    (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), item["id"]),
                 )
             print(f"Sent to {item['contact_email']} ({item['subject']})")
             summary.append((item["id"], "sent"))

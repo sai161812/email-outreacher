@@ -2,7 +2,7 @@
 Nothing sends without passing through here. AI-researched hooks can be
 wrong or stale, so every draft is a human checkpoint before it queues.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from db import get_connection
 
 
@@ -44,7 +44,7 @@ def edit(email_id, subject=None, body=None, hook=None):
         fields.append("hook = ?"); values.append(hook)
     if not fields:
         return
-    fields.append("updated_at = ?"); values.append(datetime.utcnow().isoformat())
+    fields.append("updated_at = ?"); values.append(datetime.now(timezone.utc).isoformat())
     values.append(email_id)
     with get_connection() as conn:
         conn.execute(f"UPDATE emails SET {', '.join(fields)} WHERE id = ?", values)
@@ -54,5 +54,5 @@ def _set_status(email_id, status):
     with get_connection() as conn:
         conn.execute(
             "UPDATE emails SET status = ?, updated_at = ? WHERE id = ?",
-            (status, datetime.utcnow().isoformat(), email_id),
+            (status, datetime.now(timezone.utc).isoformat(), email_id),
         )
