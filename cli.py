@@ -35,7 +35,7 @@ def cmd_set_profile(args):
 def cmd_show_profile(args):
     p = profile.get_profile()
     if not p:
-        print("No profile configured.")
+        print("No profile set yet.")
         return
     for k, v in p.items():
         if k != "id" and v:
@@ -47,7 +47,7 @@ def cmd_init(args):
 
 
 def cmd_add_resume(args):
-    rid = resume.add_resume_variant(args.name, args.keywords, args.file)
+    rid = resume.add_resume_variant(args.name, args.keywords, args.file, args.url)
     print(f"Added resume variant #{rid}: {args.name}")
 
 
@@ -76,6 +76,13 @@ def cmd_list_contacts(args):
 
 
 def cmd_compose(args):
+    if not args.force:
+        existing_emails = contacts.get_emails_for_contact(args.contact)
+        for e in existing_emails:
+            if e["status"] != "rejected" and not e.get("follow_up_to_email_id"):
+                print(f"Contact #{args.contact} already has a pending/sent email (#{e['id']}, status: {e['status']}) — use --force to draft another.")
+                return
+
     candidate_context = Path(args.context).read_text() if args.context else ""
     company = contacts.get_company(args.company)
     variant = resume.pick_best_variant(company.get("job_text") or "")
@@ -118,6 +125,8 @@ def cmd_review(args):
         return
     for e in pending:
         print("=" * 60)
+        if e.get("qc_warnings"):
+            print(f"⚠ QC WARNING: {e['qc_warnings']}")
         print(f"[{e['id']}] {e['company_name']} -> {e['contact_email']}")
         print(f"Hook: {e['hook']}")
         print(f"Subject: {e['subject']}")
@@ -175,7 +184,7 @@ def build_parser():
     sub.add_parser("init").set_defaults(func=cmd_init)
 
     a = sub.add_parser("set-profile")
-    a.add_argument("--name")
+    a.add_argument("--name", required=True)
     a.add_argument("--email")
     a.add_argument("--phone")
     a.add_argument("--linkedin-url")
@@ -189,6 +198,7 @@ def build_parser():
     a.add_argument("--name", required=True)
     a.add_argument("--keywords", required=True, help="comma separated")
     a.add_argument("--file", required=True)
+    a.add_argument("--url", help="optional public link to view resume online")
     a.set_defaults(func=cmd_add_resume)
 
     a = sub.add_parser("add-company")
@@ -221,6 +231,7 @@ def build_parser():
     a.add_argument("--company", type=int, required=True)
     a.add_argument("--contact", type=int, required=True)
     a.add_argument("--context", help="path to a text file describing your relevant background")
+    a.add_argument("--force", action="store_true", help="force composing even if an email already exists")
     a.set_defaults(func=cmd_compose)
 
     sub.add_parser("review").set_defaults(func=cmd_review)

@@ -8,17 +8,24 @@ letting an LLM freely rewrite claims about your own work is a bad idea.
 from db import get_connection
 
 
-def add_resume_variant(name, keywords, file_path):
+def add_resume_variant(name, keywords, file_path, resume_url=None):
     """
     keywords: comma-separated string, e.g. "backend,api,django,sql"
     file_path: path to the actual resume file (PDF) for this variant
+    resume_url: optional public link to view resume online
     """
     with get_connection() as conn:
         cur = conn.execute(
-            "INSERT INTO resume_variants (name, keywords, file_path) VALUES (?, ?, ?)",
-            (name, keywords, file_path),
+            "INSERT INTO resume_variants (name, keywords, file_path, resume_url) VALUES (?, ?, ?, ?)",
+            (name, keywords, file_path, resume_url),
         )
         return cur.lastrowid
+
+
+def get_variant(variant_id: int):
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM resume_variants WHERE id = ?", (variant_id,)).fetchone()
+        return dict(row) if row else None
 
 
 def list_resume_variants():

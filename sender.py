@@ -11,6 +11,7 @@ from datetime import datetime, date, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
+from email.utils import make_msgid
 from pathlib import Path
 
 import config
@@ -28,12 +29,34 @@ def _sent_today_count():
         return row["n"]
 
 
+import re
+import profile
+
+
+def _get_personalized_attachment_name(company_name, fallback_path):
+    p = profile.get_profile()
+    name_prefix = "Resume"
+    if p and p.get("full_name"):
+        parts = [re.sub(r"[^\w\-]", "", part) for part in p["full_name"].strip().split() if part.strip()]
+        if len(parts) >= 2:
+            name_prefix = f"{parts[0]}_{parts[-1]}_Resume"
+        elif len(parts) == 1:
+            name_prefix = f"{parts[0]}_Resume"
+            
+    clean_company = re.sub(r"[^\w\-]", "", (company_name or "").strip())
+    if clean_company:
+        return f"{name_prefix}_{clean_company}.pdf"
+    return f"{name_prefix}.pdf" if name_prefix != "Resume" else Path(fallback_path).name
+
+
 def get_approved_queue():
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT e.*, c.email as contact_email, rv.file_path as resume_path "
+            "SELECT e.*, c.name as company_name, ct.name as contact_name, ct.email as contact_email, "
+            "rv.file_path as resume_path, rv.resume_url "
             "FROM emails e "
-            "JOIN contacts c ON e.contact_id = c.id "
+            "JOIN companies c ON e.company_id = c.id "
+            "JOIN contacts ct ON e.contact_id = ct.id "
             "LEFT JOIN resume_variants rv ON e.resume_variant_id = rv.id "
             "WHERE e.status = 'approved' "
             "ORDER BY e.updated_at ASC"
@@ -41,18 +64,26 @@ def get_approved_queue():
         return [dict(r) for r in rows]
 
 
-def _send_one(to_email, subject, body, resume_path=None):
+def _send_one(to_email, subject, body, resume_path=None, company_name=None, in_reply_to=None):
     config.require_gmail_creds()
     msg = MIMEMultipart()
+    msg_id = make_msgid()
+    msg["Message-ID"] = msg_id
     msg["From"] = config.GMAIL_ADDRESS
     msg["To"] = to_email
     msg["Subject"] = subject
+
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+        msg["References"] = in_reply_to
+
     msg.attach(MIMEText(body, "plain"))
 
-    if resume_path and Path(resume_path).exists():
+    if config.RESUME_ATTACH_MODE == "attach" and resume_path and Path(resume_path).exists():
+        filename = _get_personalized_attachment_name(company_name, resume_path)
         with open(resume_path, "rb") as f:
-            part = MIMEApplication(f.read(), Name=Path(resume_path).name)
-        part["Content-Disposition"] = f'attachment; filename="{Path(resume_path).name}"'
+            part = MIMEApplication(f.read(), Name=filename)
+        part["Content-Disposition"] = f'attachment; filename="{filename}"'
         msg.attach(part)
 
     context = ssl.create_default_context()
@@ -60,6 +91,8 @@ def _send_one(to_email, subject, body, resume_path=None):
         server.starttls(context=context)
         server.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
         server.sendmail(config.GMAIL_ADDRESS, to_email, msg.as_string())
+
+    return msg_id
 
 
 def run_send_batch(dry_run=False):
@@ -80,19 +113,41 @@ def run_send_batch(dry_run=False):
         print(f"{len(queue) - len(batch)} approved emails held back — daily cap reached.")
 
     for i, item in enumerate(batch):
+        subject = item["subject"]
+        in_reply_to = None
+
+        if item.get("follow_up_to_email_id"):
+            with get_connection() as conn:
+                original = conn.execute(
+                    "SELECT message_id, subject FROM emails WHERE id = ?",
+                    (item["follow_up_to_email_id"],)
+                ).fetchone()
+                if original:
+                    in_reply_to = original["message_id"]
+                    orig_subj = original["subject"] or ""
+                    if not subject.lower().startswith("re:"):
+                        subject = f"Re: {orig_subj}" if orig_subj else f"Re: {subject}"
+
         if dry_run:
-            print(f"[DRY RUN] Would send to {item['contact_email']} — {item['subject']}")
+            print(f"[DRY RUN] Would send to {item['contact_email']} — {subject}")
             summary.append((item["id"], "dry_run"))
             continue
 
         try:
-            _send_one(item["contact_email"], item["subject"], item["body"], item.get("resume_path"))
+            msg_id = _send_one(
+                item["contact_email"],
+                subject,
+                item["body"],
+                item.get("resume_path"),
+                item.get("company_name"),
+                in_reply_to=in_reply_to
+            )
             with get_connection() as conn:
                 conn.execute(
-                    "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ?",
-                    (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), item["id"]),
+                    "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ?, message_id = ?, subject = ? WHERE id = ?",
+                    (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), msg_id, subject, item["id"]),
                 )
-            print(f"Sent to {item['contact_email']} ({item['subject']})")
+            print(f"Sent to {item['contact_email']} ({subject})")
             summary.append((item["id"], "sent"))
         except Exception as e:
             print(f"FAILED to send to {item['contact_email']}: {e}")

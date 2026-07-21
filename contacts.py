@@ -161,3 +161,11 @@ def find_contact_without_email(company_id):
             (company_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+def get_emails_for_contact(contact_id: int):
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM emails WHERE contact_id = ? ORDER BY created_at DESC",
+            (contact_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
