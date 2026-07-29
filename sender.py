@@ -92,14 +92,30 @@ def _send_one(to_email, subject, body, resume_path=None, company_name=None, in_r
         server.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
         server.sendmail(config.GMAIL_ADDRESS, to_email, msg.as_string())
 
-    return msg_id
+def is_in_send_window(now=None) -> bool:
+    """
+    Checks if current local time is within the allowed send-time window.
+    """
+    if now is None:
+        now = datetime.now()
+    day_str = now.strftime("%a").lower()
+    in_day = day_str in config.SEND_DAYS
+    in_hour = config.SEND_START_HOUR <= now.hour < config.SEND_END_HOUR
+    return in_day and in_hour
 
 
-def run_send_batch(dry_run=False):
+def run_send_batch(dry_run=False, force=False):
     """
     Sends everything in the 'approved' queue, up to the daily cap,
     with a randomized delay between each send. Returns a summary list.
     """
+    if not force and not is_in_send_window():
+        print(
+            f"Outside send window ({config.SEND_START_HOUR}:00 - {config.SEND_END_HOUR}:00, "
+            f"{', '.join(config.SEND_DAYS)}). Use --force to override."
+        )
+        return []
+
     queue = get_approved_queue()
     remaining_today = config.DAILY_SEND_CAP - _sent_today_count()
     summary = []
