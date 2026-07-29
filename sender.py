@@ -7,7 +7,7 @@ import random
 import smtplib
 import ssl
 import time
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
@@ -17,6 +17,7 @@ from pathlib import Path
 import config
 from db import get_connection
 import validate
+import suppression
 
 
 def _sent_today_count():
@@ -134,11 +135,42 @@ def run_send_batch(dry_run=False, force=False):
         print(f"Daily cap of {config.DAILY_SEND_CAP} already reached. Nothing sent.")
         return summary
 
+    company_counts = {}
+    cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    filtered_queue = []
+    company_held_back = 0
+    with get_connection() as conn:
+        for item in queue:
+            cid = item["company_id"]
+            if cid not in company_counts:
+                row = conn.execute(
+                    "SELECT COUNT(DISTINCT contact_id) as n FROM emails "
+                    "WHERE company_id = ? AND status IN ('sent','replied','ghosted','bounced','interview_scheduled','interview_completed','offer','no_offer') "
+                    "AND sent_at >= ?",
+                    (cid, cutoff_7d)
+                ).fetchone()
+                company_counts[cid] = row["n"]
+            
+            if company_counts[cid] >= config.MAX_PER_COMPANY_PER_WEEK:
+                company_held_back += 1
+            else:
+                filtered_queue.append(item)
+                company_counts[cid] += 1
+                
+    queue = filtered_queue
+    if company_held_back > 0:
+        print(f"{company_held_back} approved emails held back — company weekly cap reached.")
+
     batch = queue[:remaining_today]
     if len(queue) > len(batch):
         print(f"{len(queue) - len(batch)} approved emails held back — daily cap reached.")
 
     for i, item in enumerate(batch):
+        if suppression.is_suppressed(item["contact_email"]):
+            print(f"Skipping #{item['id']}: suppressed email '{item['contact_email']}'")
+            summary.append((item["id"], "skipped-suppressed"))
+            continue
+
         subject = item["subject"]
         in_reply_to = None
 
