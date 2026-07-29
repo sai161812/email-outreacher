@@ -54,6 +54,12 @@ CREATE TABLE IF NOT EXISTS emails (
     created_at            TEXT DEFAULT (datetime('now')),
     updated_at            TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS suppressions (
+    email TEXT PRIMARY KEY,
+    reason TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 # Columns added after the original release. Applied with ALTER TABLE so
