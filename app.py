@@ -52,7 +52,14 @@ def api_add_contact():
 def api_compose():
     data = request.json
     try:
-        eid = composer.compose_and_store(data["company_id"], data["contact_id"], data.get("context", ""), data.get("resume_variant_id"))
+        contact_id = data["contact_id"]
+        # Prevent drafting duplicates
+        from repository import EmailRepository
+        existing = EmailRepository.get_by_contact_id(contact_id)
+        if any(e["status"] in ["pending_review", "approved", "sent"] for e in existing):
+            return jsonify({"error": "An active email already exists for this contact."}), 400
+            
+        eid = composer.compose_and_store(data["company_id"], contact_id, data.get("resume_variant_id"))
         return jsonify({"id": eid})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -75,15 +82,9 @@ def api_review_action(email_id):
 
 @app.route('/api/tracking')
 def api_tracking_list():
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            "SELECT e.*, c.name as company_name, ct.email as contact_email "
-            "FROM emails e "
-            "JOIN companies c ON e.company_id = c.id "
-            "JOIN contacts ct ON e.contact_id = ct.id "
-            "WHERE e.status NOT IN ('pending_review') ORDER BY e.updated_at DESC"
-        ).fetchall()
-        return jsonify([dict(r) for r in rows])
+    from repository import EmailRepository
+    rows = EmailRepository.get_all_tracked_emails()
+    return jsonify([dict(r) for r in rows])
 
 @app.route('/api/tracking/due')
 def api_tracking_due():
@@ -105,6 +106,16 @@ def api_tracking_mark(email_id):
 @app.route('/api/tracking/<int:email_id>/followup', methods=['POST'])
 def api_tracking_followup(email_id):
     try:
+        from repository import EmailRepository
+        original = EmailRepository.get_by_id(email_id)
+        if not original:
+            return jsonify({"error": "Original email not found"}), 404
+        
+        # Prevent drafting duplicate followups for the same email
+        existing_emails = EmailRepository.get_by_contact_id(original["contact_id"])
+        if any(e["follow_up_to_email_id"] == email_id for e in existing_emails):
+            return jsonify({"error": "A follow-up for this email already exists."}), 400
+
         eid = composer.compose_follow_up_and_store(email_id)
         return jsonify({"id": eid})
     except Exception as e:
@@ -112,7 +123,7 @@ def api_tracking_followup(email_id):
 
 @app.route('/api/send', methods=['POST'])
 def api_send_batch():
-    summary = sender.run_send_batch(dry_run=False, force=False)
+    summary = sender.run_send_batch()
     return jsonify({"summary": summary})
 
 @app.route('/api/check_replies', methods=['POST'])
