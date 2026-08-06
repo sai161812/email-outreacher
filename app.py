@@ -55,15 +55,15 @@ def api_import_csv():
     file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
-    
+
     import tempfile
     import os
     from werkzeug.utils import secure_filename
-    
+
     filename = secure_filename(file.filename)
     tmp_path = os.path.join(tempfile.gettempdir(), filename)
     file.save(tmp_path)
-    
+
     try:
         summary = contacts.import_csv(tmp_path)
         return jsonify(summary)
@@ -82,17 +82,17 @@ def api_compose():
         existing = EmailRepository.get_by_contact_id(contact_id)
         if any(e["status"] in ["pending_review", "approved", "sent"] for e in existing):
             return jsonify({"error": "An active email already exists for this contact."}), 400
-            
+
         import os
         context_text = ""
         if os.path.exists("context.txt"):
             with open("context.txt", "r", encoding="utf-8") as f:
                 context_text = f.read()
-                
+
         eid = composer.compose_and_store(
-            company_id=data["company_id"], 
-            contact_id=contact_id, 
-            candidate_context=context_text, 
+            company_id=data["company_id"],
+            contact_id=contact_id,
+            candidate_context=context_text,
             resume_variant_id=data.get("resume_variant_id")
         )
         return jsonify({"id": eid})
@@ -145,7 +145,7 @@ def api_tracking_followup(email_id):
         original = EmailRepository.get_by_id(email_id)
         if not original:
             return jsonify({"error": "Original email not found"}), 404
-        
+
         # Prevent drafting duplicate followups for the same email
         existing_emails = EmailRepository.get_by_contact_id(original["contact_id"])
         if any(e["follow_up_to_email_id"] == email_id for e in existing_emails):

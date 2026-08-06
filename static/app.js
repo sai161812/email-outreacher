@@ -13,13 +13,13 @@ async function withLoading(btn, asyncFn) {
     if (btn.disabled) return;
     const originalHtml = btn.innerHTML;
     const originalWidth = btn.offsetWidth;
-    
+
     btn.disabled = true;
     if (originalWidth > 0) {
         btn.style.minWidth = `${originalWidth}px`;
     }
     btn.innerHTML = `<span class="spinner"></span>` + btn.innerHTML;
-    
+
     try {
         await asyncFn();
     } finally {
@@ -36,11 +36,11 @@ document.querySelectorAll('#sidebar-nav .nav-item').forEach(nav => {
     nav.addEventListener('click', (e) => {
         document.querySelectorAll('#sidebar-nav .nav-item').forEach(n => n.classList.remove('active'));
         e.target.classList.add('active');
-        
+
         const viewId = e.target.dataset.view;
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.getElementById('view-' + viewId).classList.add('active');
-        
+
         loadDataForView(viewId);
     });
 });
@@ -89,7 +89,7 @@ async function loadDashboard() {
             </div>
         `;
     });
-    
+
     const tbody = document.querySelector('#table-variant-stats tbody');
     tbody.innerHTML = '';
     data.stats.by_variant.forEach(v => {
@@ -119,7 +119,7 @@ async function loadContacts() {
         `;
         tbody.appendChild(tr);
     });
-    
+
     document.querySelectorAll('.btn-compose').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const cid = e.target.dataset.cid;
@@ -136,16 +136,16 @@ async function loadReviewQueue() {
     const drafts = await apiCall('/api/review');
     const container = document.getElementById('review-container');
     container.innerHTML = '';
-    
+
     if (drafts.length === 0) {
         container.innerHTML = '<div style="color: var(--text-secondary);">No drafts pending review.</div>';
         return;
     }
-    
+
     drafts.forEach(d => {
         const isWarning = d.qc_warnings ? 'has-warning' : '';
         const warningHtml = d.qc_warnings ? `<div class="qc-warning-text">QC FLAG: ${d.qc_warnings}</div>` : '';
-        
+
         const card = document.createElement('div');
         card.className = `review-card ${isWarning}`;
         card.innerHTML = `
@@ -176,7 +176,7 @@ async function loadReviewQueue() {
         `;
         container.appendChild(card);
     });
-    
+
     // Bind actions
     document.querySelectorAll('.btn-approve').forEach(b => b.addEventListener('click', (e) => {
         withLoading(e.currentTarget, async () => {
@@ -211,7 +211,7 @@ async function loadReviewQueue() {
 async function loadTracking() {
     const due = await apiCall('/api/tracking/due');
     const sent = await apiCall('/api/tracking');
-    
+
     const dueBody = document.querySelector('#table-due tbody');
     dueBody.innerHTML = '';
     due.forEach(d => {
@@ -224,7 +224,7 @@ async function loadTracking() {
             </tr>
         `;
     });
-    
+
     document.querySelectorAll('.btn-followup').forEach(b => b.addEventListener('click', (e) => {
         withLoading(e.currentTarget, async () => {
             const id = e.currentTarget.dataset.id;
@@ -233,7 +233,7 @@ async function loadTracking() {
             loadTracking();
         });
     }));
-    
+
     const sentBody = document.querySelector('#table-tracking tbody');
     sentBody.innerHTML = '';
     sent.forEach(s => {
@@ -241,7 +241,7 @@ async function loadTracking() {
         if (['replied','interview_scheduled','interview_completed','offer'].includes(s.status)) dotClass = 'success';
         if (s.status === 'bounced' || s.status === 'no_offer') dotClass = 'danger';
         if (s.status === 'ghosted') dotClass = 'warning';
-        
+
         sentBody.innerHTML += `
             <tr>
                 <td>${s.company_name}</td>
@@ -264,7 +264,7 @@ async function loadTracking() {
             </tr>
         `;
     });
-    
+
     document.querySelectorAll('.btn-mark').forEach(b => b.addEventListener('click', (e) => {
         withLoading(e.currentTarget, async () => {
             const id = e.currentTarget.dataset.id;
@@ -305,7 +305,7 @@ document.getElementById('btn-save-contact').addEventListener('click', (e) => {
         const cid = document.getElementById('add-company-id').value;
         const email = document.getElementById('add-email').value;
         const name = document.getElementById('add-name').value;
-        
+
         await apiCall('/api/contacts', 'POST', { company_id: cid, email, name });
         showToast('Contact added');
         document.getElementById('modal-add-contact').classList.add('hidden');
@@ -319,13 +319,13 @@ document.getElementById('inp-import-csv').addEventListener('change', async (e) =
     const file = e.target.files[0];
     const formData = new FormData();
     formData.append('file', file);
-    
+
     try {
         showToast('Uploading CSV...', false);
         const res = await fetch('/api/contacts/import', { method: 'POST', body: formData });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Upload failed');
-        
+
         const errCount = data.errors ? data.errors.length : 0;
         showToast(`Imported ${data.companies_created} companies, ${data.contacts_created} contacts. ${errCount} errors.`);
         loadContacts();
@@ -336,4 +336,3 @@ document.getElementById('inp-import-csv').addEventListener('change', async (e) =
 });
 // Initial load
 loadDashboard();
-

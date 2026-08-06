@@ -81,12 +81,12 @@ def run_send_batch(dry_run=False, force=True):
     company_counts = {}
     cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     filtered_queue = []
-    
+
     for item in queue:
         cid = item["company_id"]
         if cid not in company_counts:
             company_counts[cid] = EmailRepository.count_company_sends_since(cid, cutoff_7d)
-        
+
         if company_counts[cid] >= config.MAX_PER_COMPANY_PER_WEEK:
             continue
         else:
@@ -127,7 +127,7 @@ def run_send_batch(dry_run=False, force=True):
             success = False
             for attempt in range(2):
                 try:
-                    
+
                     resume_path = None
                     resume_url = None
                     if item.get("resume_variant_id"):
@@ -149,7 +149,7 @@ def run_send_batch(dry_run=False, force=True):
                         resume_url=resume_url,
                         attach_mode=config.RESUME_ATTACH_MODE,
                     )
-                    
+
                     EmailRepository.update_sent(item["id"], msg_id, subject)
                     summary.append({"id": item["id"], "status": "sent", "contact": item["contact_email"]})
                     success = True

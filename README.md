@@ -1,12 +1,19 @@
-# Outreach ?" internship cold-email tool
+# Email Outreacher
 
-A personal, self-hosted web application that researches a company, drafts a personalized cold email with your resume, and sends it under rate limits ?" with a mandatory human review step before anything goes out.
+A personal, self-hosted application for managing internship outreach. It researches a company, drafts a tailored email around an existing resume, and sends only after an explicit human review.
+
+## What it demonstrates
+
+- A Flask operator dashboard for contacts, drafts, approvals, tracking, and follow-ups.
+- AI-assisted company research and draft generation with deterministic quality checks.
+- SQLite-backed state management for contacts, resume variants, email status, and suppression records.
+- Safe delivery controls: approval gates, rate limits, randomized delays, duplicate-send protection, and reply tracking.
 
 ## Why it's built this way
 
 - **One SQLite file is the source of truth.** Every module reads/writes through a central `repository.py` to `outreach.db`.
 - **Every draft needs your approval before it can send.** The AI research step can get facts wrong or stale; the Review dashboard is the safety net for that, not an optional step.
-- **Sends are capped and randomly delayed** to protect your own email account's sender reputation. Don't remove this to "go faster" ?" getting your account flagged as spam is worse than a slow campaign.
+- **Sends are capped and randomly delayed** to protect sender reputation. Speed is not worth getting an account flagged as spam.
 - **Resume content is never AI-generated.** You register resume variants (PDF files you already wrote); the tool only picks which variant fits a given job posting by keyword match.
 - **Contact sourcing is manual, on purpose.** A named person's email outperforms a scraped generic inbox by a wide margin.
 
@@ -25,7 +32,7 @@ cp .env.example .env
 #   GMAIL_APP_PASSWORD   - generate at https://myaccount.google.com/apppasswords
 #                          (requires 2-Step Verification turned on)
 
-> **IMPORTANT ?" Enable IMAP in Gmail**:
+> **Important — enable IMAP in Gmail**:
 > You must manually enable IMAP access in your Gmail account for automatic reply detection to work.
 > Go to **Gmail +' Settings (gear icon) +' See all settings +' Forwarding and POP/IMAP +' Enable IMAP** and click **Save Changes**.
 ```
@@ -53,7 +60,7 @@ Every drafted email lands in the **Review** tab. You MUST review every draft bef
 - Click **Reject** to discard it.
 
 ### 3. Sending
-Once emails are approved, click the **Send Batch** button on the Dashboard. 
+Once emails are approved, click the **Send Batch** button on the Dashboard.
 - The system respects the `DAILY_SEND_CAP` configured in `.env` (or defaults to 15).
 - It will randomly delay each send to protect your sender reputation.
 - It will automatically attach the correct personalized PDF resume to the email.
@@ -66,6 +73,6 @@ Click the **Tracking** tab to see the status of all sent emails.
 
 ## Known limitations (by design, for v1)
 
-- No automated contact discovery/scraping ?" you source contacts yourself. This is intentional: named-person emails outperform scraped generic inboxes by a wide margin, and scraping (e.g. LinkedIn) violates most platforms' terms of service.
-- Gmail SMTP with an app password is used for sending. If Google tightens or removes app-password SMTP access, the fix is to swap `sender.py` for the Gmail API with OAuth ?" the rest of the tool is unaffected.
-- No multi-user/team features ?" this is a personal tool meant to be run locally or on a private cloud instance.
+- No automated contact discovery or scraping. Contacts are sourced manually; scraping platforms such as LinkedIn also violates their terms of service.
+- Gmail SMTP with an app password is used for delivery. Moving to Gmail OAuth would only require replacing the transport layer.
+- No multi-user/team features. This is a focused personal tool, intended for local or private deployment.

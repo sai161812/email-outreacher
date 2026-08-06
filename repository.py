@@ -6,9 +6,9 @@ class CompanyRepository:
     def get_all():
         with get_connection() as conn:
             return conn.execute("""
-                SELECT c.*, 
+                SELECT c.*,
                        (SELECT COUNT(*) FROM contacts ct WHERE ct.company_id = c.id) as contact_count
-                FROM companies c 
+                FROM companies c
                 ORDER BY c.name
             """).fetchall()
 
@@ -35,8 +35,8 @@ class ContactRepository:
     @staticmethod
     def get_all_by_company(company_id=None):
         query = """
-            SELECT ct.*, c.name as company_name 
-            FROM contacts ct 
+            SELECT ct.*, c.name as company_name
+            FROM contacts ct
             JOIN companies c ON ct.company_id = c.id
         """
         params = []
@@ -44,7 +44,7 @@ class ContactRepository:
             query += " WHERE ct.company_id = ?"
             params.append(company_id)
         query += " ORDER BY c.name, ct.email"
-        
+
         with get_connection() as conn:
             return conn.execute(query, params).fetchall()
 
@@ -125,8 +125,8 @@ class EmailRepository:
     def create(company_id, contact_id, resume_variant_id, hook, subject, body, qc_warnings, follow_up_to_email_id=None):
         with get_connection() as conn:
             cursor = conn.execute(
-                """INSERT INTO emails 
-                   (company_id, contact_id, resume_variant_id, follow_up_to_email_id, hook, subject, body, qc_warnings) 
+                """INSERT INTO emails
+                   (company_id, contact_id, resume_variant_id, follow_up_to_email_id, hook, subject, body, qc_warnings)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (company_id, contact_id, resume_variant_id, follow_up_to_email_id, hook, subject, body, qc_warnings)
             )
@@ -139,26 +139,26 @@ class EmailRepository:
                 "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ?, message_id = ?, subject = ? WHERE id = ?",
                 (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), msg_id, subject, email_id),
             )
-            
+
     @staticmethod
     def update_status(email_id, status, set_updated_at=False, set_sent_at=False, sent_at_time=None):
         query = "UPDATE emails SET status = ?"
         params = [status]
-        
+
         if set_updated_at:
             query += ", updated_at = ?"
             params.append(datetime.now(timezone.utc).isoformat())
-            
+
         if set_sent_at:
             query += ", sent_at = ?"
             params.append(sent_at_time or datetime.now(timezone.utc).isoformat())
-            
+
         query += " WHERE id = ?"
         params.append(email_id)
-        
+
         with get_connection() as conn:
             conn.execute(query, params)
-            
+
     @staticmethod
     def update_content(email_id, subject=None, body=None, hook=None):
         updates = []
@@ -172,14 +172,14 @@ class EmailRepository:
         if hook is not None:
             updates.append("hook = ?")
             params.append(hook)
-            
+
         if not updates:
             return
-            
+
         updates.append("status = 'approved'")
         query = f"UPDATE emails SET {', '.join(updates)} WHERE id = ?"
         params.append(email_id)
-        
+
         with get_connection() as conn:
             conn.execute(query, params)
 
@@ -187,11 +187,11 @@ class EmailRepository:
     def get_pending_review():
         with get_connection() as conn:
             return conn.execute(
-                """SELECT e.*, c.name as company_name, ct.email as contact_email 
-                   FROM emails e 
-                   JOIN companies c ON e.company_id = c.id 
-                   JOIN contacts ct ON e.contact_id = ct.id 
-                   WHERE e.status = 'pending_review' 
+                """SELECT e.*, c.name as company_name, ct.email as contact_email
+                   FROM emails e
+                   JOIN companies c ON e.company_id = c.id
+                   JOIN contacts ct ON e.contact_id = ct.id
+                   WHERE e.status = 'pending_review'
                    ORDER BY e.created_at ASC"""
             ).fetchall()
 
@@ -200,10 +200,10 @@ class EmailRepository:
         with get_connection() as conn:
             return conn.execute(
                 """SELECT e.*, ct.email as contact_email, c.domain as company_domain, ct.source as contact_source
-                   FROM emails e 
-                   JOIN contacts ct ON e.contact_id = ct.id 
+                   FROM emails e
+                   JOIN contacts ct ON e.contact_id = ct.id
                    JOIN companies c ON e.company_id = c.id
-                   WHERE e.status = 'approved' 
+                   WHERE e.status = 'approved'
                    ORDER BY ct.source = 'referral' DESC, e.created_at ASC"""
             ).fetchall()
 
@@ -211,11 +211,11 @@ class EmailRepository:
     def get_due_for_follow_up(cutoff_date_iso):
         with get_connection() as conn:
             return conn.execute(
-                """SELECT e.*, c.name as company_name, ct.email as contact_email 
-                   FROM emails e 
-                   JOIN companies c ON e.company_id = c.id 
-                   JOIN contacts ct ON e.contact_id = ct.id 
-                   WHERE e.status = 'sent' AND date(e.sent_at) <= ? 
+                """SELECT e.*, c.name as company_name, ct.email as contact_email
+                   FROM emails e
+                   JOIN companies c ON e.company_id = c.id
+                   JOIN contacts ct ON e.contact_id = ct.id
+                   WHERE e.status = 'sent' AND date(e.sent_at) <= ?
                    AND e.id NOT IN (SELECT follow_up_to_email_id FROM emails WHERE follow_up_to_email_id IS NOT NULL)""",
                 (cutoff_date_iso,)
             ).fetchall()
@@ -224,9 +224,9 @@ class EmailRepository:
     def get_sent_candidates_for_replies():
         with get_connection() as conn:
             return conn.execute(
-                """SELECT e.id, e.message_id, c.email as contact_email 
-                   FROM emails e 
-                   JOIN contacts c ON e.contact_id = c.id 
+                """SELECT e.id, e.message_id, c.email as contact_email
+                   FROM emails e
+                   JOIN contacts c ON e.contact_id = c.id
                    WHERE e.status = 'sent'"""
             ).fetchall()
 
@@ -264,16 +264,16 @@ class EmailRepository:
                       OR (e.sent_at IS NOT NULL AND e.status NOT IN ('pending_review', 'approved', 'rejected'))"""
             ).fetchall()
             return variants, emails
-            
+
     @staticmethod
     def get_all_tracked_emails():
         with get_connection() as conn:
             return conn.execute(
-                """SELECT e.*, c.name as company_name, ct.email as contact_email 
-                   FROM emails e 
-                   JOIN companies c ON e.company_id = c.id 
-                   JOIN contacts ct ON e.contact_id = ct.id 
-                   WHERE e.status NOT IN ('pending_review') 
+                """SELECT e.*, c.name as company_name, ct.email as contact_email
+                   FROM emails e
+                   JOIN companies c ON e.company_id = c.id
+                   JOIN contacts ct ON e.contact_id = ct.id
+                   WHERE e.status NOT IN ('pending_review')
                    ORDER BY e.updated_at DESC"""
             ).fetchall()
 
@@ -282,7 +282,7 @@ class ProfileRepository:
     def get_profile():
         with get_connection() as conn:
             return conn.execute("SELECT * FROM profile WHERE id = 1").fetchone()
-            
+
     @staticmethod
     def upsert_profile(full_name, email, phone, linkedin_url, github_url, portfolio_url):
         with get_connection() as conn:

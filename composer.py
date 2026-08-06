@@ -29,7 +29,7 @@ SYSTEM_PROMPT = """You are an elite B2B copywriter helping a first-year engineer
 draft a highly-converting cold email for an internship. You have Google Search available.
 
 CRITICAL DIRECTIVES:
-1. OUTPUT ONLY THE BODY PITCH. Do not include a greeting line or a sign-off/signature. 
+1. OUTPUT ONLY THE BODY PITCH. Do not include a greeting line or a sign-off/signature.
 2. NO PLACEHOLDERS. Never use bracket placeholders anywhere in your output. Write actual sentences.
 3. NO PLEASANTRIES. Never use "Hope this finds you well" or introduce yourself.
 4. DEEP PERSONALIZATION. Research the company using search. Find a recent product launch, \
@@ -76,11 +76,11 @@ def _build_signature(resume_url: str = None) -> str:
     if not p:
         print("Warning: No profile is configured. Run `set-profile` to add a signature block.")
         return "Best,"
-    
+
     lines = ["Best,"]
     if p.get("full_name"):
         lines.append(p["full_name"])
-        
+
     links = []
     if p.get("portfolio_url"):
         links.append(p["portfolio_url"])
@@ -90,10 +90,10 @@ def _build_signature(resume_url: str = None) -> str:
         links.append(p["linkedin_url"])
     if config.RESUME_ATTACH_MODE == "link" and resume_url:
         links.append(f"Resume: {resume_url}")
-        
+
     if links:
         lines.append("  |  ".join(links))
-        
+
     return "\n".join(lines)
 
 
@@ -147,7 +147,7 @@ FOLLOW_UP_SYSTEM_PROMPT = """You are an elite B2B copywriter helping a first-yea
 write a highly-converting, brief follow-up to a cold outreach email they sent earlier.
 
 CRITICAL DIRECTIVES:
-1. OUTPUT ONLY THE BODY PITCH. Do not include a greeting line or a sign-off/signature. 
+1. OUTPUT ONLY THE BODY PITCH. Do not include a greeting line or a sign-off/signature.
 2. NO PLACEHOLDERS. Never use bracket placeholders anywhere in your output. Write actual sentences.
 3. MAX 2-3 SENTENCES. Brevity is paramount. This is a nudge, not a new pitch. (40 words max).
 4. TONE: Confident, polite, and low-pressure. No guilt-tripping ("Since you didn't reply"), no "just checking in" filler.
@@ -157,7 +157,7 @@ CRITICAL DIRECTIVES:
 
 Example Good Follow-Up:
 Subject: Re: Question about the new payment API
-Following up on my note below—I actually just finished open-sourcing the caching layer I mentioned. 
+Following up on my note below—I actually just finished open-sourcing the caching layer I mentioned.
 Would you be open to a quick 10-minute chat next week to see if my background aligns with your backend internship needs?
 
 Subject should be "Re: <original subject>" unless it reads awkwardly.
@@ -212,7 +212,7 @@ def compose_follow_up(original_email_id: int) -> dict:
                 "subject": "(needs manual fix)",
                 "body": f"Failed to parse structured output: {e}\n\n{full_text}",
             }
-    
+
     result["hook"] = original.get("hook")  # carry the original hook forward for reference
     return result
 
@@ -237,12 +237,12 @@ def compose_follow_up_and_store(original_email_id: int) -> int:
     with get_connection() as conn:
         contact = conn.execute("SELECT * FROM contacts WHERE id = ?", (original["contact_id"],)).fetchone()
         contact = dict(contact) if contact else {}
-        
+
     if contact and contact.get("email") and suppression.is_suppressed(contact["email"]):
         raise ValueError(f"Contact {contact['email']} is suppressed. Will not draft follow-up.")
 
     result = compose_follow_up(original_email_id)
-        
+
     resume_url = None
     if original.get("resume_variant_id"):
         import resume
@@ -261,7 +261,7 @@ def compose_follow_up_and_store(original_email_id: int) -> int:
 
     # Run QC checks
     warnings = (
-        qc.detect_placeholders(final_subject) + 
+        qc.detect_placeholders(final_subject) +
         qc.detect_placeholders(final_body) +
         qc.check_subject(final_subject) +
         qc.check_body(final_body)
@@ -287,7 +287,7 @@ def compose_and_store(company_id: int, contact_id: int, candidate_context: str,
 
     company = get_company(company_id)
     contact = get_contact(contact_id)
-    
+
     if contact and contact.get("email") and suppression.is_suppressed(contact["email"]):
         raise ValueError(f"Contact {contact['email']} is suppressed. Will not draft email.")
 
@@ -309,7 +309,7 @@ def compose_and_store(company_id: int, contact_id: int, candidate_context: str,
 
     # Run QC checks
     warnings = (
-        qc.detect_placeholders(final_subject) + 
+        qc.detect_placeholders(final_subject) +
         qc.detect_placeholders(final_body) +
         qc.check_subject(final_subject) +
         qc.check_body(final_body)
