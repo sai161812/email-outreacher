@@ -1,0 +1,54 @@
+name: Automated Daily Contribution Release
+
+on:
+  schedule:
+    # Runs twice daily: 05:30 UTC (11:00 AM IST) and 12:30 UTC (6:00 PM IST)
+    - cron: '30 5 * * *'
+    - cron: '30 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-daily-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Fetch Staging Branch
+        run: |
+          git fetch origin staging:staging || true
+
+      - name: Advance Main to Today's Target
+        run: |
+          CURRENT_DATE=$(TZ='Asia/Kolkata' date +'%Y-%m-%d')
+          echo "Current Date (IST): $CURRENT_DATE"
+
+          TARGETS_FILE=".github/daily_targets.json"
+          if [ ! -f "$TARGETS_FILE" ]; then
+            echo "Targets file not found, skipping."
+            exit 0
+          fi
+
+          TARGET_SHA=$(jq -r --arg date "$CURRENT_DATE" '.[$date].target_sha // empty' "$TARGETS_FILE")
+
+          if [ -z "$TARGET_SHA" ]; then
+            echo "No target commit configured for $CURRENT_DATE."
+            exit 0
+          fi
+
+          echo "Target SHA for $CURRENT_DATE: $TARGET_SHA"
+          CURRENT_MAIN_SHA=$(git rev-parse HEAD)
+
+          if [ "$CURRENT_MAIN_SHA" = "$TARGET_SHA" ]; then
+            echo "Main is already up to date with $TARGET_SHA."
+            exit 0
+          fi
+
+          git push origin $TARGET_SHA:refs/heads/main
+          echo "Successfully pushed target commits up to $TARGET_SHA for $CURRENT_DATE!"

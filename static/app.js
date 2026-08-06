@@ -1,4 +1,4 @@
-// Simple Toast system
+﻿// Simple Toast system
 function showToast(message, isError = false) {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
@@ -151,7 +151,7 @@ async function loadReviewQueue() {
         card.innerHTML = `
             <div class="review-card-header">
                 <div>
-                    <div class="review-card-meta">PENDING REVIEW � ${d.company_name}</div>
+                    <div class="review-card-meta">PENDING REVIEW • ${d.company_name}</div>
                     <div class="review-card-title">${d.contact_email}</div>
                     ${warningHtml}
                 </div>
@@ -313,5 +313,27 @@ document.getElementById('btn-save-contact').addEventListener('click', (e) => {
     });
 });
 
+
+document.getElementById('inp-import-csv').addEventListener('change', async (e) => {
+    if (!e.target.files.length) return;
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        showToast('Uploading CSV...', false);
+        const res = await fetch('/api/contacts/import', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        
+        const errCount = data.errors ? data.errors.length : 0;
+        showToast(`Imported ${data.companies_created} companies, ${data.contacts_created} contacts. ${errCount} errors.`);
+        loadContacts();
+    } catch (err) {
+        showToast(err.message, true);
+    }
+    e.target.value = '';
+});
 // Initial load
 loadDashboard();
+
