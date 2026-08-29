@@ -13,6 +13,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 import profile
+import qc
 
 import config
 from db import get_connection
@@ -72,13 +73,12 @@ def _build_user_prompt(company: dict, contact: dict, candidate_context: str) -> 
 def _build_signature() -> str:
     p = profile.get_profile()
     if not p:
-        return ""
+        print("Warning: No profile is configured. Run `set-profile` to add a signature block.")
+        return "Best,"
     
-    parts = []
+    lines = ["Best,"]
     if p.get("full_name"):
-        parts.append(f"\nBest,\n{p['full_name']}")
-    else:
-        parts.append("\nBest,")
+        lines.append(p["full_name"])
         
     links = []
     if p.get("portfolio_url"):
@@ -89,12 +89,9 @@ def _build_signature() -> str:
         links.append(p["linkedin_url"])
         
     if links:
-        parts.append(" | ".join(links))
+        lines.append("  |  ".join(links))
         
-    if p.get("phone"):
-        parts.append(p["phone"])
-        
-    return "\n".join(parts)
+    return "\n".join(lines)
 
 
 def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
@@ -120,24 +117,10 @@ def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
 
     try:
         draft = response.parsed
-        subject = draft.subject
-        body = draft.body
-        
-        # Deterministic greeting and signature
-        first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
-        greeting = f"Hi {first_name}," if first_name else "Hi there,"
-        signature = _build_signature()
-        body = f"{greeting}\n\n{body}\n{signature}"
-        
-        # Regex safety net
-        placeholder_pattern = r'\[[A-Za-z][A-Za-z \'-]{1,20}\]'
-        if re.search(placeholder_pattern, subject) or re.search(placeholder_pattern, body):
-            subject = f"[WARNING: PLACEHOLDER DETECTED] {subject}"
-
         return {
             "hook": draft.hook,
-            "subject": subject,
-            "body": body,
+            "subject": draft.subject,
+            "body": draft.body,
             "research_notes": draft.research_notes,
         }
     except Exception as e:
@@ -209,26 +192,9 @@ def compose_follow_up(original_email_id: int) -> dict:
 
     try:
         draft = response.parsed
-        subject = draft.subject
-        body = draft.body
-
-        # Deterministic greeting and signature
-        with get_connection() as conn:
-            contact = conn.execute("SELECT * FROM contacts WHERE id = ?", (original["contact_id"],)).fetchone()
-            contact = dict(contact) if contact else {}
-        first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
-        greeting = f"Hi {first_name}," if first_name else "Hi there,"
-        signature = _build_signature()
-        body = f"{greeting}\n\n{body}\n{signature}"
-
-        # Regex safety net
-        placeholder_pattern = r'\[[A-Za-z][A-Za-z \'-]{1,20}\]'
-        if re.search(placeholder_pattern, subject) or re.search(placeholder_pattern, body):
-            subject = f"[WARNING: PLACEHOLDER DETECTED] {subject}"
-
         result = {
-            "subject": subject,
-            "body": body,
+            "subject": draft.subject,
+            "body": draft.body,
         }
     except Exception as e:
         full_text = response.text or ""
@@ -260,13 +226,28 @@ def compose_follow_up_and_store(original_email_id: int) -> int:
     result = compose_follow_up(original_email_id)
 
     with get_connection() as conn:
+        contact = conn.execute("SELECT * FROM contacts WHERE id = ?", (original["contact_id"],)).fetchone()
+        contact = dict(contact) if contact else {}
+        
+    # Assemble final body
+    first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
+    greeting = f"Hi {first_name}," if first_name else "Hi there,"
+    signature = _build_signature()
+    final_body = f"{greeting}\n\n{result.get('body')}\n\n{signature}"
+    final_subject = result.get("subject", "")
+
+    # Run QC checks
+    warnings = qc.detect_placeholders(final_subject) + qc.detect_placeholders(final_body)
+    qc_warnings_str = ";".join(warnings) if warnings else None
+
+    with get_connection() as conn:
         cur = conn.execute(
             "INSERT INTO emails (company_id, contact_id, resume_variant_id, "
-            "follow_up_to_email_id, hook, subject, body, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_review')",
+            "follow_up_to_email_id, hook, subject, body, qc_warnings, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_review')",
             (
                 original["company_id"], original["contact_id"], original["resume_variant_id"],
-                original_email_id, result.get("hook"), result.get("subject"), result.get("body"),
+                original_email_id, result.get("hook"), final_subject, final_body, qc_warnings_str
             ),
         )
         return cur.lastrowid
@@ -274,19 +255,30 @@ def compose_follow_up_and_store(original_email_id: int) -> int:
 
 def compose_and_store(company_id: int, contact_id: int, candidate_context: str,
                        resume_variant_id: int = None) -> int:
-    from contacts import get_company, get_contact  # local import avoids circularity
+    from contacts import get_company, get_contact
 
     company = get_company(company_id)
     contact = get_contact(contact_id)
     result = compose_email(company, contact, candidate_context)
 
+    # Assemble final body
+    first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
+    greeting = f"Hi {first_name}," if first_name else "Hi there,"
+    signature = _build_signature()
+    final_body = f"{greeting}\n\n{result.get('body')}\n\n{signature}"
+    final_subject = result.get("subject", "")
+
+    # Run QC checks
+    warnings = qc.detect_placeholders(final_subject) + qc.detect_placeholders(final_body)
+    qc_warnings_str = ";".join(warnings) if warnings else None
+
     with get_connection() as conn:
         cur = conn.execute(
             "INSERT INTO emails (company_id, contact_id, resume_variant_id, hook, "
-            "subject, body, status) VALUES (?, ?, ?, ?, ?, ?, 'pending_review')",
+            "subject, body, qc_warnings, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_review')",
             (
                 company_id, contact_id, resume_variant_id,
-                result.get("hook"), result.get("subject"), result.get("body"),
+                result.get("hook"), final_subject, final_body, qc_warnings_str
             ),
         )
         return cur.lastrowid
