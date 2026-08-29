@@ -65,7 +65,10 @@ def get_approved_queue():
         return [dict(r) for r in rows]
 
 
-def _send_one(to_email, subject, body, resume_path=None, company_name=None, in_reply_to=None):
+def _send_one(to_email, subject, body, resume_path=None, company_name=None, in_reply_to=None, resume_url=None, attach_mode=None):
+    if attach_mode is None:
+        attach_mode = config.RESUME_ATTACH_MODE
+
     config.require_gmail_creds()
     msg = MIMEMultipart()
     msg_id = make_msgid()
@@ -78,9 +81,13 @@ def _send_one(to_email, subject, body, resume_path=None, company_name=None, in_r
         msg["In-Reply-To"] = in_reply_to
         msg["References"] = in_reply_to
 
+    if attach_mode == "link" and resume_url:
+        if resume_url not in body:
+            body = f"{body}\n\nResume: {resume_url}"
+
     msg.attach(MIMEText(body, "plain"))
 
-    if config.RESUME_ATTACH_MODE == "attach" and resume_path and Path(resume_path).exists():
+    if (attach_mode == "attach" or not resume_url) and resume_path and Path(resume_path).exists():
         filename = _get_personalized_attachment_name(company_name, resume_path)
         with open(resume_path, "rb") as f:
             part = MIMEApplication(f.read(), Name=filename)
@@ -92,6 +99,8 @@ def _send_one(to_email, subject, body, resume_path=None, company_name=None, in_r
         server.starttls(context=context)
         server.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
         server.sendmail(config.GMAIL_ADDRESS, to_email, msg.as_string())
+
+    return msg_id
 
 def is_in_send_window(now=None) -> bool:
     """
@@ -145,7 +154,7 @@ def run_send_batch(dry_run=False, force=False):
                     if not subject.lower().startswith("re:"):
                         subject = f"Re: {orig_subj}" if orig_subj else f"Re: {subject}"
 
-        if not validate.validate_email_syntax(item["contact_email"]):
+        if not validate.is_valid_syntax(item["contact_email"]):
             print(f"Skipping #{item['id']}: invalid email format '{item['contact_email']}'")
             summary.append((item["id"], "error: invalid email format"))
             continue
@@ -160,9 +169,11 @@ def run_send_batch(dry_run=False, force=False):
                 item["contact_email"],
                 subject,
                 item["body"],
-                item.get("resume_path"),
-                item.get("company_name"),
-                in_reply_to=in_reply_to
+                resume_path=item.get("resume_path"),
+                company_name=item.get("company_name"),
+                in_reply_to=in_reply_to,
+                resume_url=item.get("resume_url"),
+                attach_mode=config.RESUME_ATTACH_MODE,
             )
             with get_connection() as conn:
                 conn.execute(

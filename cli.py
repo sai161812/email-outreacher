@@ -47,7 +47,7 @@ def cmd_init(args):
 
 
 def cmd_add_resume(args):
-    rid = resume.add_resume_variant(args.name, args.keywords, args.file, args.url)
+    rid = resume.add_resume_variant(args.name, args.keywords, args.file, args.resume_url)
     print(f"Added resume variant #{rid}: {args.name}")
 
 
@@ -198,7 +198,7 @@ def build_parser():
     a.add_argument("--name", required=True)
     a.add_argument("--keywords", required=True, help="comma separated")
     a.add_argument("--file", required=True)
-    a.add_argument("--url", help="optional public link to view resume online")
+    a.add_argument("--resume-url", "--url", dest="resume_url", help="optional public link to view resume online")
     a.set_defaults(func=cmd_add_resume)
 
     a = sub.add_parser("add-company")

@@ -5,52 +5,62 @@ EMAIL_REGEX = re.compile(
 )
 
 
-def validate_email_syntax(email: str) -> bool:
+def is_valid_syntax(email: str) -> bool:
     """
     Checks if an email string has valid syntax according to standard email format.
+    Must reject things like 'jane@acme' with no TLD, spaces, multiple @ signs.
     """
     if not email or not isinstance(email, str):
         return False
-    return bool(EMAIL_REGEX.match(email.strip()))
-
-
-def validate_email_domain_mx(email: str) -> bool:
-    """
-    Checks if the domain of an email address has active MX records via DNS.
-    Returns True if valid or if DNS check is inconclusive (network issue),
-    returns False if the domain explicitly does not exist or has no MX records.
-    """
-    if not validate_email_syntax(email):
+    email = email.strip()
+    if not EMAIL_REGEX.match(email):
         return False
+    # Ensure there is a dot in domain part and non-empty TLD
+    domain = email.split("@")[-1]
+    if "." not in domain or domain.endswith("."):
+        return False
+    return True
 
-    domain = email.strip().split("@")[-1]
+
+def has_mx_record(domain: str) -> bool | None:
+    """
+    Checks if the domain has active MX records via DNS.
+    Returns True if valid MX found, False if NXDOMAIN/NoAnswer,
+    and None on any other DNS/network failure.
+    """
+    if not domain or not isinstance(domain, str):
+        return False
     try:
         import dns.resolver
-        answers = dns.resolver.resolve(domain, "MX")
+        answers = dns.resolver.resolve(domain.strip(), "MX")
         return len(answers) > 0
     except Exception as e:
-        # If domain specifically does not exist or has no MX answer
         err_name = type(e).__name__
         if err_name in ("NXDOMAIN", "NoAnswer", "NoNameservers"):
             return False
-        # If there's a timeout or local network resolution issue, treat as inconclusive/permissive
-        return True
+        # Inconclusive/network/timeout -> return None
+        return None
 
 
-def validate_contact_email(email: str, check_mx: bool = False) -> tuple[bool, str | None]:
+def validate_email(email: str) -> tuple[bool, str | None]:
     """
-    Validates email format and optionally checks MX records.
-    Returns (is_valid, error_message).
+    Combines syntax and MX checks.
+    Hard-fails (False, reason) on bad syntax.
+    Soft-warns (True, reason) on missing/unknown MX.
+    Returns (is_valid, warning_or_error_message).
     """
     if not email or not isinstance(email, str):
         return False, "Email address is empty"
 
     email = email.strip()
-    if not validate_email_syntax(email):
-        return False, f"Invalid email format: '{email}'"
+    if not is_valid_syntax(email):
+        return False, f"Invalid email syntax: '{email}'"
 
-    if check_mx:
-        if not validate_email_domain_mx(email):
-            return False, f"Domain '{email.split('@')[-1]}' has no valid MX records"
+    domain = email.split("@")[-1]
+    mx_status = has_mx_record(domain)
+    if mx_status is False:
+        return True, f"Domain '{domain}' has no valid MX records"
+    elif mx_status is None:
+        return True, f"Could not verify MX records for '{domain}'"
 
     return True, None

@@ -25,9 +25,8 @@ def add_company(name, domain=None, job_url=None, job_text=None, notes=None):
 
 
 def add_contact(company_id, email, name=None, title=None, source=None):
-    is_valid, err = validate.validate_contact_email(email)
-    if not is_valid:
-        raise ValueError(err or f"Invalid email address: {email}")
+    if not validate.is_valid_syntax(email):
+        raise ValueError(f"Invalid email address: {email}")
 
     with get_connection() as conn:
         cur = conn.execute(
@@ -86,9 +85,8 @@ def import_csv(file_path):
                 summary["errors"].append((i, "missing company_name or contact_email"))
                 continue
 
-            is_valid, err = validate.validate_contact_email(email)
-            if not is_valid:
-                summary["errors"].append((i, err or f"Invalid email format: {email}"))
+            if not validate.is_valid_syntax(email):
+                summary["errors"].append((i, f"Invalid email format: {email}"))
                 continue
 
             cache_key = name.lower()
