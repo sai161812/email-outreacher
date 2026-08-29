@@ -18,12 +18,13 @@ import argparse
 from pathlib import Path
 
 import db
-import contacts
 import resume
+import contacts
 import composer
 import reviewer
 import sender
 import tracker
+import suppression
 import profile
 
 
@@ -177,6 +178,24 @@ def cmd_follow_ups(args):
         print(f"[{e['id']}] {e['company_name']} — {e['contact_email']} (sent {e['sent_at']})")
 
 
+def cmd_suppress(args):
+    suppression.add(args.email, args.reason)
+    print(f"Suppressed {args.email}")
+
+def cmd_unsuppress(args):
+    suppression.remove(args.email)
+    print(f"Unsuppressed {args.email}")
+
+def cmd_list_suppressed(args):
+    rows = suppression.list_all()
+    if not rows:
+        print("No suppressions.")
+        return
+    for r in rows:
+        reason = f" ({r['reason']})" if r['reason'] else ""
+        print(f"{r['email']}{reason} - {r['created_at']}")
+
+
 def build_parser():
     p = argparse.ArgumentParser(description="Internship outreach tool")
     sub = p.add_subparsers(dest="command", required=True)
@@ -267,6 +286,17 @@ def build_parser():
     a = sub.add_parser("follow-up")
     a.add_argument("--email", type=int, required=True, help="ID of the original SENT email to follow up on")
     a.set_defaults(func=cmd_follow_up)
+
+    a = sub.add_parser("suppress")
+    a.add_argument("--email", required=True)
+    a.add_argument("--reason", default="")
+    a.set_defaults(func=cmd_suppress)
+
+    a = sub.add_parser("unsuppress")
+    a.add_argument("--email", required=True)
+    a.set_defaults(func=cmd_unsuppress)
+
+    sub.add_parser("list-suppressed").set_defaults(func=cmd_list_suppressed)
 
     return p
 
