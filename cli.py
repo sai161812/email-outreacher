@@ -24,7 +24,22 @@ import composer
 import reviewer
 import sender
 import tracker
+import profile
 
+
+def cmd_set_profile(args):
+    profile.set_profile(args.name, args.email, args.phone, args.linkedin_url, args.github_url, args.portfolio_url)
+    print("Profile updated.")
+
+
+def cmd_show_profile(args):
+    p = profile.get_profile()
+    if not p:
+        print("No profile configured.")
+        return
+    for k, v in p.items():
+        if k != "id" and v:
+            print(f"{k}: {v}")
 
 def cmd_init(args):
     db.init_db()
@@ -158,6 +173,17 @@ def build_parser():
     sub = p.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init").set_defaults(func=cmd_init)
+
+    a = sub.add_parser("set-profile")
+    a.add_argument("--name")
+    a.add_argument("--email")
+    a.add_argument("--phone")
+    a.add_argument("--linkedin-url")
+    a.add_argument("--github-url")
+    a.add_argument("--portfolio-url")
+    a.set_defaults(func=cmd_set_profile)
+
+    sub.add_parser("show-profile").set_defaults(func=cmd_show_profile)
 
     a = sub.add_parser("add-resume")
     a.add_argument("--name", required=True)

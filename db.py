@@ -54,6 +54,16 @@ CREATE TABLE IF NOT EXISTS emails (
     created_at            TEXT DEFAULT (datetime('now')),
     updated_at            TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS profile (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    full_name     TEXT,
+    email         TEXT,
+    phone         TEXT,
+    linkedin_url  TEXT,
+    github_url    TEXT,
+    portfolio_url TEXT
+);
 """
 
 # Columns added after the original release. Applied with ALTER TABLE so
