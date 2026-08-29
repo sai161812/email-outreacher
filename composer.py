@@ -14,6 +14,7 @@ from google.genai import types
 from pydantic import BaseModel
 import profile
 import qc
+import suppression
 
 import config
 from db import get_connection
@@ -225,11 +226,14 @@ def compose_follow_up_and_store(original_email_id: int) -> int:
             "follow-ups are only for emails that were actually sent."
         )
 
-    result = compose_follow_up(original_email_id)
-
     with get_connection() as conn:
         contact = conn.execute("SELECT * FROM contacts WHERE id = ?", (original["contact_id"],)).fetchone()
         contact = dict(contact) if contact else {}
+        
+    if contact and contact.get("email") and suppression.is_suppressed(contact["email"]):
+        raise ValueError(f"Contact {contact['email']} is suppressed. Will not draft follow-up.")
+
+    result = compose_follow_up(original_email_id)
         
     resume_url = None
     if original.get("resume_variant_id"):
@@ -270,6 +274,10 @@ def compose_and_store(company_id: int, contact_id: int, candidate_context: str,
 
     company = get_company(company_id)
     contact = get_contact(contact_id)
+    
+    if contact and contact.get("email") and suppression.is_suppressed(contact["email"]):
+        raise ValueError(f"Contact {contact['email']} is suppressed. Will not draft email.")
+
     result = compose_email(company, contact, candidate_context)
 
     resume_url = None
