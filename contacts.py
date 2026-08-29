@@ -37,14 +37,32 @@ def add_contact(company_id, email, name=None, title=None, source=None):
         return cur.lastrowid
 
 
-def find_company_by_name(name):
+import re
+
+def normalize_company_name(name):
+    if not name:
+        return ""
+    n = re.sub(r'\s+', ' ', name.strip())
+    return n.rstrip('.')
+
+def find_company_by_name(name, domain=None):
     """Used by CSV import to avoid creating duplicate company rows when
     the same company appears on multiple CSV rows (multiple contacts)."""
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM companies WHERE name = ? COLLATE NOCASE", (name,)
-        ).fetchone()
-        return dict(row) if row else None
+        if domain:
+            row = conn.execute(
+                "SELECT * FROM companies WHERE domain = ? COLLATE NOCASE", (domain.strip(),)
+            ).fetchone()
+            if row:
+                return dict(row)
+
+        norm_name = normalize_company_name(name)
+        rows = conn.execute("SELECT * FROM companies").fetchall()
+        for r in rows:
+            if normalize_company_name(r["name"]).lower() == norm_name.lower():
+                return dict(r)
+
+        return None
 
 
 def import_csv(file_path):
@@ -89,17 +107,18 @@ def import_csv(file_path):
                 summary["errors"].append((i, f"Invalid email format: {email}"))
                 continue
 
-            cache_key = name.lower()
+            domain = (row.get("domain") or "").strip()
+            cache_key = (normalize_company_name(name).lower(), domain.lower() if domain else "")
             if cache_key in company_cache:
                 company_id = company_cache[cache_key]
             else:
-                existing = find_company_by_name(name)
+                existing = find_company_by_name(name, domain)
                 if existing:
                     company_id = existing["id"]
                 else:
                     company_id = add_company(
-                        name=name,
-                        domain=(row.get("domain") or "").strip() or None,
+                        name=normalize_company_name(name),
+                        domain=domain or None,
                         job_url=(row.get("job_url") or "").strip() or None,
                         notes=(row.get("notes") or "").strip() or None,
                     )
