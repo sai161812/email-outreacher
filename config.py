@@ -25,6 +25,7 @@ SMTP_PORT = 587
 
 # --- Rate limiting (protects your sender reputation) ---
 DAILY_SEND_CAP = int(os.getenv("DAILY_SEND_CAP", "15"))
+MAX_PER_COMPANY_PER_WEEK = int(os.getenv("MAX_PER_COMPANY_PER_WEEK", "2"))
 MIN_DELAY_SECONDS = int(os.getenv("MIN_DELAY_SECONDS", "45"))
 MAX_DELAY_SECONDS = int(os.getenv("MAX_DELAY_SECONDS", "240"))
 
