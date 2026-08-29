@@ -5,6 +5,7 @@ just SQL, because this doesn't need more than that.
 import csv
 
 from db import get_connection
+import validate
 
 CSV_REQUIRED_COLUMNS = ["company_name", "contact_email"]
 CSV_OPTIONAL_COLUMNS = [
@@ -24,11 +25,15 @@ def add_company(name, domain=None, job_url=None, job_text=None, notes=None):
 
 
 def add_contact(company_id, email, name=None, title=None, source=None):
+    is_valid, err = validate.validate_contact_email(email)
+    if not is_valid:
+        raise ValueError(err or f"Invalid email address: {email}")
+
     with get_connection() as conn:
         cur = conn.execute(
             "INSERT INTO contacts (company_id, email, name, title, source) "
             "VALUES (?, ?, ?, ?, ?)",
-            (company_id, email, name, title, source),
+            (company_id, email.strip(), name, title, source),
         )
         return cur.lastrowid
 
@@ -79,6 +84,11 @@ def import_csv(file_path):
 
             if not name or not email:
                 summary["errors"].append((i, "missing company_name or contact_email"))
+                continue
+
+            is_valid, err = validate.validate_contact_email(email)
+            if not is_valid:
+                summary["errors"].append((i, err or f"Invalid email format: {email}"))
                 continue
 
             cache_key = name.lower()

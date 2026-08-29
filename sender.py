@@ -16,6 +16,7 @@ from pathlib import Path
 
 import config
 from db import get_connection
+import validate
 
 
 def _sent_today_count():
@@ -143,6 +144,11 @@ def run_send_batch(dry_run=False, force=False):
                     orig_subj = original["subject"] or ""
                     if not subject.lower().startswith("re:"):
                         subject = f"Re: {orig_subj}" if orig_subj else f"Re: {subject}"
+
+        if not validate.validate_email_syntax(item["contact_email"]):
+            print(f"Skipping #{item['id']}: invalid email format '{item['contact_email']}'")
+            summary.append((item["id"], "error: invalid email format"))
+            continue
 
         if dry_run:
             print(f"[DRY RUN] Would send to {item['contact_email']} — {subject}")
