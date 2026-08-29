@@ -149,7 +149,7 @@ def cmd_edit(args):
 
 
 def cmd_send(args):
-    sender.run_send_batch(dry_run=args.dry_run)
+    sender.run_send_batch(dry_run=args.dry_run, force=args.force)
 
 
 def cmd_status(args):
@@ -252,6 +252,7 @@ def build_parser():
 
     a = sub.add_parser("send")
     a.add_argument("--dry-run", action="store_true")
+    a.add_argument("--force", action="store_true", help="force sending outside the send-time window")
     a.set_defaults(func=cmd_send)
 
     sub.add_parser("status").set_defaults(func=cmd_status)
