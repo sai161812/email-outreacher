@@ -76,6 +76,14 @@ def cmd_list_contacts(args):
 
 
 def cmd_compose(args):
+    if not args.force:
+        existing_emails = contacts.get_emails_for_contact(args.contact)
+        for e in existing_emails:
+            if e["status"] != "rejected" and not e.get("follow_up_to_email_id"):
+                print(f"Aborting: A non-rejected original email (ID #{e['id']}, Status: {e['status']}) already exists for this contact.")
+                print("Use --force to draft another one anyway.")
+                return
+
     candidate_context = Path(args.context).read_text() if args.context else ""
     company = contacts.get_company(args.company)
     variant = resume.pick_best_variant(company.get("job_text") or "")
@@ -221,6 +229,7 @@ def build_parser():
     a.add_argument("--company", type=int, required=True)
     a.add_argument("--contact", type=int, required=True)
     a.add_argument("--context", help="path to a text file describing your relevant background")
+    a.add_argument("--force", action="store_true", help="force composing even if an email already exists")
     a.set_defaults(func=cmd_compose)
 
     sub.add_parser("review").set_defaults(func=cmd_review)
