@@ -5,6 +5,7 @@ place to record what happened, and surfaces what's due for follow-up.
 from datetime import datetime, timedelta, date, timezone
 import config
 from db import get_connection
+import suppression
 
 
 def mark_replied(email_id):
@@ -17,6 +18,13 @@ def mark_ghosted(email_id):
 
 def mark_bounced(email_id):
     _set_status(email_id, "bounced")
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT c.email FROM emails e JOIN contacts c ON e.contact_id = c.id WHERE e.id = ?",
+            (email_id,)
+        ).fetchone()
+        if row and row["email"]:
+            suppression.add(row["email"], "bounced")
 
 
 def _set_status(email_id, status):
