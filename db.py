@@ -73,6 +73,7 @@ MIGRATIONS = [
     )""",
     "ALTER TABLE emails ADD COLUMN qc_warnings TEXT",
     "ALTER TABLE resume_variants ADD COLUMN resume_url TEXT",
+    "ALTER TABLE emails ADD COLUMN message_id TEXT",
 ]
 
 

@@ -11,6 +11,7 @@ from datetime import datetime, date, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
+from email.utils import make_msgid
 from pathlib import Path
 
 import config
@@ -63,12 +64,19 @@ def get_approved_queue():
         return [dict(r) for r in rows]
 
 
-def _send_one(to_email, subject, body, resume_path=None, company_name=None):
+def _send_one(to_email, subject, body, resume_path=None, company_name=None, in_reply_to=None):
     config.require_gmail_creds()
     msg = MIMEMultipart()
+    msg_id = make_msgid()
+    msg["Message-ID"] = msg_id
     msg["From"] = config.GMAIL_ADDRESS
     msg["To"] = to_email
     msg["Subject"] = subject
+
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+        msg["References"] = in_reply_to
+
     msg.attach(MIMEText(body, "plain"))
 
     if config.RESUME_ATTACH_MODE == "attach" and resume_path and Path(resume_path).exists():
@@ -83,6 +91,8 @@ def _send_one(to_email, subject, body, resume_path=None, company_name=None):
         server.starttls(context=context)
         server.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
         server.sendmail(config.GMAIL_ADDRESS, to_email, msg.as_string())
+
+    return msg_id
 
 
 def run_send_batch(dry_run=False):
@@ -103,19 +113,41 @@ def run_send_batch(dry_run=False):
         print(f"{len(queue) - len(batch)} approved emails held back — daily cap reached.")
 
     for i, item in enumerate(batch):
+        subject = item["subject"]
+        in_reply_to = None
+
+        if item.get("follow_up_to_email_id"):
+            with get_connection() as conn:
+                original = conn.execute(
+                    "SELECT message_id, subject FROM emails WHERE id = ?",
+                    (item["follow_up_to_email_id"],)
+                ).fetchone()
+                if original:
+                    in_reply_to = original["message_id"]
+                    orig_subj = original["subject"] or ""
+                    if not subject.lower().startswith("re:"):
+                        subject = f"Re: {orig_subj}" if orig_subj else f"Re: {subject}"
+
         if dry_run:
-            print(f"[DRY RUN] Would send to {item['contact_email']} — {item['subject']}")
+            print(f"[DRY RUN] Would send to {item['contact_email']} — {subject}")
             summary.append((item["id"], "dry_run"))
             continue
 
         try:
-            _send_one(item["contact_email"], item["subject"], item["body"], item.get("resume_path"), item.get("company_name"))
+            msg_id = _send_one(
+                item["contact_email"],
+                subject,
+                item["body"],
+                item.get("resume_path"),
+                item.get("company_name"),
+                in_reply_to=in_reply_to
+            )
             with get_connection() as conn:
                 conn.execute(
-                    "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ?",
-                    (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), item["id"]),
+                    "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ?, message_id = ?, subject = ? WHERE id = ?",
+                    (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), msg_id, subject, item["id"]),
                 )
-            print(f"Sent to {item['contact_email']} ({item['subject']})")
+            print(f"Sent to {item['contact_email']} ({subject})")
             summary.append((item["id"], "sent"))
         except Exception as e:
             print(f"FAILED to send to {item['contact_email']}: {e}")

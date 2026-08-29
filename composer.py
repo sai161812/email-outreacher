@@ -244,6 +244,8 @@ def compose_follow_up_and_store(original_email_id: int) -> int:
     signature = _build_signature(resume_url=resume_url)
     final_body = f"{greeting}\n\n{result.get('body')}\n\n{signature}"
     final_subject = result.get("subject", "")
+    if original.get("subject") and not final_subject.lower().startswith("re:"):
+        final_subject = f"Re: {original['subject']}"
 
     # Run QC checks
     warnings = qc.detect_placeholders(final_subject) + qc.detect_placeholders(final_body)
