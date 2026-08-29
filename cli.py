@@ -35,7 +35,7 @@ def cmd_set_profile(args):
 def cmd_show_profile(args):
     p = profile.get_profile()
     if not p:
-        print("No profile configured.")
+        print("No profile set yet.")
         return
     for k, v in p.items():
         if k != "id" and v:
@@ -80,8 +80,7 @@ def cmd_compose(args):
         existing_emails = contacts.get_emails_for_contact(args.contact)
         for e in existing_emails:
             if e["status"] != "rejected" and not e.get("follow_up_to_email_id"):
-                print(f"Aborting: A non-rejected original email (ID #{e['id']}, Status: {e['status']}) already exists for this contact.")
-                print("Use --force to draft another one anyway.")
+                print(f"Contact #{args.contact} already has a pending/sent email (#{e['id']}, status: {e['status']}) — use --force to draft another.")
                 return
 
     candidate_context = Path(args.context).read_text() if args.context else ""
@@ -126,6 +125,8 @@ def cmd_review(args):
         return
     for e in pending:
         print("=" * 60)
+        if e.get("qc_warnings"):
+            print(f"⚠ QC WARNING: {e['qc_warnings']}")
         print(f"[{e['id']}] {e['company_name']} -> {e['contact_email']}")
         print(f"Hook: {e['hook']}")
         print(f"Subject: {e['subject']}")
@@ -183,7 +184,7 @@ def build_parser():
     sub.add_parser("init").set_defaults(func=cmd_init)
 
     a = sub.add_parser("set-profile")
-    a.add_argument("--name")
+    a.add_argument("--name", required=True)
     a.add_argument("--email")
     a.add_argument("--phone")
     a.add_argument("--linkedin-url")
