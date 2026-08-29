@@ -12,6 +12,8 @@ import re
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
+import profile
+import qc
 
 import config
 from db import get_connection
@@ -26,8 +28,8 @@ SYSTEM_PROMPT = """You are an elite B2B copywriter helping a first-year engineer
 draft a highly-converting cold email for an internship. You have Google Search available.
 
 CRITICAL DIRECTIVES:
-1. OUTPUT ONLY THE BODY PITCH. Do not include a greeting line (e.g., "Hi Name,") or a sign-off/signature (e.g., "Best, Student"). 
-2. NO PLACEHOLDERS. Never use bracket placeholders like [Name], [Student], or [Company] anywhere in your output. Write actual sentences.
+1. OUTPUT ONLY THE BODY PITCH. Do not include a greeting line or a sign-off/signature. 
+2. NO PLACEHOLDERS. Never use bracket placeholders anywhere in your output. Write actual sentences.
 3. NO PLEASANTRIES. Never use "Hope this finds you well" or introduce yourself.
 4. DEEP PERSONALIZATION. Research the company using search. Find a recent product launch, \
 a specific tech stack detail, or an engineering challenge they face.
@@ -68,6 +70,32 @@ def _build_user_prompt(company: dict, contact: dict, candidate_context: str) -> 
     return "\n".join(parts)
 
 
+def _build_signature(resume_url: str = None) -> str:
+    p = profile.get_profile()
+    if not p:
+        print("Warning: No profile is configured. Run `set-profile` to add a signature block.")
+        return "Best,"
+    
+    lines = ["Best,"]
+    if p.get("full_name"):
+        lines.append(p["full_name"])
+        
+    links = []
+    if p.get("portfolio_url"):
+        links.append(p["portfolio_url"])
+    if p.get("github_url"):
+        links.append(p["github_url"])
+    if p.get("linkedin_url"):
+        links.append(p["linkedin_url"])
+    if config.RESUME_ATTACH_MODE == "link" and resume_url:
+        links.append(f"Resume: {resume_url}")
+        
+    if links:
+        lines.append("  |  ".join(links))
+        
+    return "\n".join(lines)
+
+
 def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
     """
     Calls Gemini with Google Search grounding enabled, returns dict with
@@ -91,23 +119,10 @@ def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
 
     try:
         draft = response.parsed
-        subject = draft.subject
-        body = draft.body
-        
-        # Deterministic greeting
-        first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
-        greeting = f"Hi {first_name}," if first_name else "Hi there,"
-        body = f"{greeting}\n\n{body}"
-        
-        # Regex safety net
-        placeholder_pattern = r'\[[A-Za-z][A-Za-z \'-]{1,20}\]'
-        if re.search(placeholder_pattern, subject) or re.search(placeholder_pattern, body):
-            subject = f"[WARNING: PLACEHOLDER DETECTED] {subject}"
-
         return {
             "hook": draft.hook,
-            "subject": subject,
-            "body": body,
+            "subject": draft.subject,
+            "body": draft.body,
             "research_notes": draft.research_notes,
         }
     except Exception as e:
@@ -128,8 +143,8 @@ FOLLOW_UP_SYSTEM_PROMPT = """You are an elite B2B copywriter helping a first-yea
 write a highly-converting, brief follow-up to a cold outreach email they sent earlier.
 
 CRITICAL DIRECTIVES:
-1. OUTPUT ONLY THE BODY PITCH. Do not include a greeting line (e.g., "Hi Name,") or a sign-off/signature (e.g., "Best, Student"). 
-2. NO PLACEHOLDERS. Never use bracket placeholders like [Name], [Student], or [Company] anywhere in your output. Write actual sentences.
+1. OUTPUT ONLY THE BODY PITCH. Do not include a greeting line or a sign-off/signature. 
+2. NO PLACEHOLDERS. Never use bracket placeholders anywhere in your output. Write actual sentences.
 3. MAX 2-3 SENTENCES. Brevity is paramount. This is a nudge, not a new pitch. (40 words max).
 4. TONE: Confident, polite, and low-pressure. No guilt-tripping ("Since you didn't reply"), no "just checking in" filler.
 5. CONTEXT: Reference the original email seamlessly without restating it (assume they will scroll down).
@@ -179,25 +194,9 @@ def compose_follow_up(original_email_id: int) -> dict:
 
     try:
         draft = response.parsed
-        subject = draft.subject
-        body = draft.body
-
-        # Deterministic greeting
-        with get_connection() as conn:
-            contact = conn.execute("SELECT * FROM contacts WHERE id = ?", (original["contact_id"],)).fetchone()
-            contact = dict(contact) if contact else {}
-        first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
-        greeting = f"Hi {first_name}," if first_name else "Hi there,"
-        body = f"{greeting}\n\n{body}"
-
-        # Regex safety net
-        placeholder_pattern = r'\[[A-Za-z][A-Za-z \'-]{1,20}\]'
-        if re.search(placeholder_pattern, subject) or re.search(placeholder_pattern, body):
-            subject = f"[WARNING: PLACEHOLDER DETECTED] {subject}"
-
         result = {
-            "subject": subject,
-            "body": body,
+            "subject": draft.subject,
+            "body": draft.body,
         }
     except Exception as e:
         full_text = response.text or ""
@@ -229,13 +228,37 @@ def compose_follow_up_and_store(original_email_id: int) -> int:
     result = compose_follow_up(original_email_id)
 
     with get_connection() as conn:
+        contact = conn.execute("SELECT * FROM contacts WHERE id = ?", (original["contact_id"],)).fetchone()
+        contact = dict(contact) if contact else {}
+        
+    resume_url = None
+    if original.get("resume_variant_id"):
+        import resume
+        variant = resume.get_variant(original["resume_variant_id"])
+        if variant:
+            resume_url = variant.get("resume_url")
+
+    # Assemble final body
+    first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
+    greeting = f"Hi {first_name}," if first_name else "Hi there,"
+    signature = _build_signature(resume_url=resume_url)
+    final_body = f"{greeting}\n\n{result.get('body')}\n\n{signature}"
+    final_subject = result.get("subject", "")
+    if original.get("subject") and not final_subject.lower().startswith("re:"):
+        final_subject = f"Re: {original['subject']}"
+
+    # Run QC checks
+    warnings = qc.detect_placeholders(final_subject) + qc.detect_placeholders(final_body)
+    qc_warnings_str = ";".join(warnings) if warnings else None
+
+    with get_connection() as conn:
         cur = conn.execute(
             "INSERT INTO emails (company_id, contact_id, resume_variant_id, "
-            "follow_up_to_email_id, hook, subject, body, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_review')",
+            "follow_up_to_email_id, hook, subject, body, qc_warnings, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_review')",
             (
                 original["company_id"], original["contact_id"], original["resume_variant_id"],
-                original_email_id, result.get("hook"), result.get("subject"), result.get("body"),
+                original_email_id, result.get("hook"), final_subject, final_body, qc_warnings_str
             ),
         )
         return cur.lastrowid
@@ -243,19 +266,37 @@ def compose_follow_up_and_store(original_email_id: int) -> int:
 
 def compose_and_store(company_id: int, contact_id: int, candidate_context: str,
                        resume_variant_id: int = None) -> int:
-    from contacts import get_company, get_contact  # local import avoids circularity
+    from contacts import get_company, get_contact
 
     company = get_company(company_id)
     contact = get_contact(contact_id)
     result = compose_email(company, contact, candidate_context)
 
+    resume_url = None
+    if resume_variant_id:
+        import resume
+        variant = resume.get_variant(resume_variant_id)
+        if variant:
+            resume_url = variant.get("resume_url")
+
+    # Assemble final body
+    first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
+    greeting = f"Hi {first_name}," if first_name else "Hi there,"
+    signature = _build_signature(resume_url=resume_url)
+    final_body = f"{greeting}\n\n{result.get('body')}\n\n{signature}"
+    final_subject = result.get("subject", "")
+
+    # Run QC checks
+    warnings = qc.detect_placeholders(final_subject) + qc.detect_placeholders(final_body)
+    qc_warnings_str = ";".join(warnings) if warnings else None
+
     with get_connection() as conn:
         cur = conn.execute(
             "INSERT INTO emails (company_id, contact_id, resume_variant_id, hook, "
-            "subject, body, status) VALUES (?, ?, ?, ?, ?, ?, 'pending_review')",
+            "subject, body, qc_warnings, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_review')",
             (
                 company_id, contact_id, resume_variant_id,
-                result.get("hook"), result.get("subject"), result.get("body"),
+                result.get("hook"), final_subject, final_body, qc_warnings_str
             ),
         )
         return cur.lastrowid
