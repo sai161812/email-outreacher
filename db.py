@@ -74,6 +74,13 @@ MIGRATIONS = [
     "ALTER TABLE emails ADD COLUMN qc_warnings TEXT",
     "ALTER TABLE resume_variants ADD COLUMN resume_url TEXT",
     "ALTER TABLE emails ADD COLUMN message_id TEXT",
+    """
+    CREATE TABLE IF NOT EXISTS suppressions (
+        email TEXT PRIMARY KEY,
+        reason TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )
+    """,
 ]
 
 
