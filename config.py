@@ -28,6 +28,11 @@ DAILY_SEND_CAP = int(os.getenv("DAILY_SEND_CAP", "15"))
 MIN_DELAY_SECONDS = int(os.getenv("MIN_DELAY_SECONDS", "45"))
 MAX_DELAY_SECONDS = int(os.getenv("MAX_DELAY_SECONDS", "240"))
 
+# --- Send-time window (local time) ---
+SEND_DAYS = [d.strip().lower() for d in os.getenv("SEND_DAYS", "mon,tue,wed,thu,fri").split(",") if d.strip()]
+SEND_START_HOUR = int(os.getenv("SEND_START_HOUR", "9"))
+SEND_END_HOUR = int(os.getenv("SEND_END_HOUR", "18"))
+
 # --- Follow-up ---
 FOLLOW_UP_AFTER_DAYS = int(os.getenv("FOLLOW_UP_AFTER_DAYS", "7"))
 
