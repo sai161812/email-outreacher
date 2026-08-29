@@ -7,47 +7,48 @@ The output ALWAYS lands as pending_review — nothing here sends anything.
 If the research turns up nothing solid, drafting should say so rather
 than inventing a fact. That instruction is baked into the prompt below.
 """
-import json
-import re
+
 
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
 
 import config
 from db import get_connection
 
-SYSTEM_PROMPT = """You are helping a first-year engineering student draft a cold \
-outreach email to a company for an internship. You have Google Search available.
+class EmailDraft(BaseModel):
+    hook: str
+    subject: str
+    body: str
+    research_notes: str
 
-Steps:
-1. Research the company (and the specific job posting if given) using search. \
-Look for something concrete and current: a recent product launch, a specific \
-technology they use, a blog post, an engineering challenge they've talked about. \
-Do NOT use generic praise ("I admire your innovative culture") — that is worse \
-than no hook at all.
-2. If you cannot find anything concrete and verifiable after searching, say so \
-explicitly in the "hook" field (e.g. "No specific hook found — verify manually \
-before sending") rather than inventing something plausible-sounding.
-3. Draft a short, direct, non-flowery cold email (120-180 words) that:
-   - Opens with the specific hook, not a generic greeting
-   - Briefly connects the student's relevant experience to the role
-   - Has a clear, low-friction ask (e.g. a short call, or just "happy to share \
-more") — not presumptuous
-   - Ends with a plain sign-off
-   A recruiter or HR skims cold emails in seconds — 120-180 words is a hard \
-ceiling, not a target to reach. Shorter and specific beats longer and thorough.
-5. Subject line: under 8 words, specific to the role or hook (e.g. "Backend \
-intern interest — [specific project/tech]"), never generic ("Internship \
-Application", "Reaching Out") since generic subjects get skipped in a crowded \
-inbox.
-4. Do not fabricate any claim about the student's own background beyond what is \
-given to you in the candidate_context.
+SYSTEM_PROMPT = """You are an elite B2B copywriter helping a first-year engineering student \
+draft a highly-converting cold email for an internship. You have Google Search available.
 
-Respond with ONLY valid JSON, no markdown fences, no preamble, in this exact shape:
-{"hook": "...", "subject": "...", "body": "...", "research_notes": "..."}
+CRITICAL DIRECTIVES:
+1. NO PLEASANTRIES. Never use "Hope this finds you well" or "My name is...".
+2. DEEP PERSONALIZATION. Research the company using search. Find a recent product launch, \
+a specific tech stack detail, or an engineering challenge they face.
+3. THE "WHY YOU, WHY ME" FRAMEWORK. The email must be exactly 3-4 sentences:
+   - Sentence 1 (The Hook): A direct, specific observation about their company based on your research.
+   - Sentence 2 (The Pitch): Connect their specific context to a specific skill or project from the student's background.
+   - Sentence 3 (The Ask): A low-friction, confident call to action (e.g., "Open to a brief chat?", not "Please interview me").
+4. CONFIDENT TONE. Be direct, professional, and confident. Do not sound pleading, desperate, or overly deferential.
+5. LENGTH: 50-90 words MAXIMUM. Shorter is always better.
+6. SUBJECT LINE: Under 6 words, highly specific to the hook or role. Never generic.
 
-research_notes should list the specific facts you found and where (so the student \
-can double check before sending).
+Example Good Draft:
+Subject: Question about the new payment API
+Hi [Name],
+Noticed you just rolled out the new GraphQL payment API—looks like a massive upgrade for latency.
+I recently built a similar distributed caching layer for a Go microservice that handled 10k requests/sec, and I'd love to bring that experience to your backend team as an intern.
+Open to a brief chat later this week?
+Best,
+[Student]
+
+If you cannot find anything concrete and verifiable after searching, say so explicitly in the "hook" field rather than inventing something.
+Do not fabricate any claim about the student's own background beyond what is in the candidate_context.
+research_notes should list the specific facts you found and where.
 """
 
 
@@ -68,12 +69,6 @@ def _build_user_prompt(company: dict, contact: dict, candidate_context: str) -> 
     return "\n".join(parts)
 
 
-def _extract_json(text: str) -> dict:
-    text = text.strip()
-    text = re.sub(r"^```(json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
-    return json.loads(text)
-
-
 def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
     """
     Calls Gemini with Google Search grounding enabled, returns dict with
@@ -90,42 +85,52 @@ def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             tools=[types.Tool(google_search=types.GoogleSearch())],
+            response_mime_type="application/json",
+            response_schema=EmailDraft,
         ),
     )
 
-    full_text = response.text or ""
-
     try:
-        return _extract_json(full_text)
-    except json.JSONDecodeError:
-        # Fall back to storing raw text so nothing is silently lost —
-        # you'll see the mangled output in review and can retry/fix by hand.
+        draft = response.parsed
+        return {
+            "hook": draft.hook,
+            "subject": draft.subject,
+            "body": draft.body,
+            "research_notes": draft.research_notes,
+        }
+    except Exception as e:
+        full_text = response.text or ""
         return {
             "hook": "PARSE_ERROR",
             "subject": "(needs manual fix)",
-            "body": full_text,
-            "research_notes": "Model output was not valid JSON, showing raw output.",
+            "body": f"Failed to parse structured output: {e}\n\n{full_text}",
+            "research_notes": "Model output parsing failed.",
         }
 
 
-FOLLOW_UP_SYSTEM_PROMPT = """You are helping a first-year engineering student write a \
-brief follow-up to a cold outreach email they sent earlier that got no reply.
+class FollowUpDraft(BaseModel):
+    subject: str
+    body: str
 
-Rules:
-- 40-70 words MAXIMUM. This is a nudge, not a new pitch — brevity is the entire point.
-- Reference the original email briefly (e.g. "Following up on my note from last week \
-about...") rather than restating the whole pitch.
-- Add ONE small new piece of value if possible (e.g. "since then I also..."), but if \
-there is nothing new, that is fine — do not pad with filler.
-- Stay low-pressure and polite. No guilt-tripping, no "just checking in" repeated \
-more than once, no fake urgency.
-- Do not re-explain who the student is in detail — assume the reader either read the \
-first email or will scroll down to it.
+FOLLOW_UP_SYSTEM_PROMPT = """You are an elite B2B copywriter helping a first-year engineering student \
+write a highly-converting, brief follow-up to a cold outreach email they sent earlier.
 
-Respond with ONLY valid JSON, no markdown fences, no preamble, in this exact shape:
-{"subject": "...", "body": "..."}
+CRITICAL DIRECTIVES:
+1. MAX 2-3 SENTENCES. Brevity is paramount. This is a nudge, not a new pitch. (40 words max).
+2. TONE: Confident, polite, and low-pressure. No guilt-tripping ("Since you didn't reply"), no "just checking in" filler.
+3. CONTEXT: Reference the original email seamlessly without restating it (assume they will scroll down).
+4. VALUE-ADD (Optional but preferred): If possible, mention one tiny new relevant detail (e.g., "Just shipped a new feature on the Go project I mentioned..."), otherwise just keep it extremely brief.
+5. THE ASK: A simple, low-friction yes/no question.
 
-subject should typically be "Re: <original subject>" unless that reads awkwardly.
+Example Good Follow-Up:
+Subject: Re: Question about the new payment API
+Hi [Name],
+Following up on my note below—I actually just finished open-sourcing the caching layer I mentioned. 
+Would you be open to a quick 10-minute chat next week to see if my background aligns with your backend internship needs?
+Best,
+[Student]
+
+Subject should be "Re: <original subject>" unless it reads awkwardly.
 """
 
 
@@ -154,16 +159,24 @@ def compose_follow_up(original_email_id: int) -> dict:
     response = client.models.generate_content(
         model=config.GEMINI_MODEL,
         contents=user_prompt,
-        config=types.GenerateContentConfig(system_instruction=FOLLOW_UP_SYSTEM_PROMPT),
+        config=types.GenerateContentConfig(
+            system_instruction=FOLLOW_UP_SYSTEM_PROMPT,
+            response_mime_type="application/json",
+            response_schema=FollowUpDraft,
+        ),
     )
 
-    full_text = response.text or ""
     try:
-        result = _extract_json(full_text)
-    except json.JSONDecodeError:
+        draft = response.parsed
+        result = {
+            "subject": draft.subject,
+            "body": draft.body,
+        }
+    except Exception as e:
+        full_text = response.text or ""
         result = {
             "subject": "(needs manual fix)",
-            "body": full_text,
+            "body": f"Failed to parse structured output: {e}\n\n{full_text}",
         }
     result["hook"] = original.get("hook")  # carry the original hook forward for reference
     return result

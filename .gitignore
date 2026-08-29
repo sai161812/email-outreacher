@@ -85,3 +85,8 @@ temp/
 *.pid
 *.seed
 *.orig
+# Local database and test files
+outreach.db
+test_insert.py
+resumes/
+venv/

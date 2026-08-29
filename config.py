@@ -14,7 +14,7 @@ RESUME_DIR = BASE_DIR / "resumes"
 
 # --- Gemini API (used for research + drafting) ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.1-pro-preview"
 
 # --- Gmail SMTP sending ---
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS", "")

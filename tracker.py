@@ -2,7 +2,7 @@
 You said you'll read replies yourself — this module just gives you a
 place to record what happened, and surfaces what's due for follow-up.
 """
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 import config
 from db import get_connection
 
@@ -23,7 +23,7 @@ def _set_status(email_id, status):
     with get_connection() as conn:
         conn.execute(
             "UPDATE emails SET status = ?, updated_at = ? WHERE id = ?",
-            (status, datetime.utcnow().isoformat(), email_id),
+            (status, datetime.now(timezone.utc).isoformat(), email_id),
         )
 
 
