@@ -12,6 +12,7 @@ import re
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
+import profile
 
 import config
 from db import get_connection
@@ -68,6 +69,34 @@ def _build_user_prompt(company: dict, contact: dict, candidate_context: str) -> 
     return "\n".join(parts)
 
 
+def _build_signature() -> str:
+    p = profile.get_profile()
+    if not p:
+        return ""
+    
+    parts = []
+    if p.get("full_name"):
+        parts.append(f"\nBest,\n{p['full_name']}")
+    else:
+        parts.append("\nBest,")
+        
+    links = []
+    if p.get("portfolio_url"):
+        links.append(p["portfolio_url"])
+    if p.get("github_url"):
+        links.append(p["github_url"])
+    if p.get("linkedin_url"):
+        links.append(p["linkedin_url"])
+        
+    if links:
+        parts.append(" | ".join(links))
+        
+    if p.get("phone"):
+        parts.append(p["phone"])
+        
+    return "\n".join(parts)
+
+
 def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
     """
     Calls Gemini with Google Search grounding enabled, returns dict with
@@ -94,10 +123,11 @@ def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
         subject = draft.subject
         body = draft.body
         
-        # Deterministic greeting
+        # Deterministic greeting and signature
         first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
         greeting = f"Hi {first_name}," if first_name else "Hi there,"
-        body = f"{greeting}\n\n{body}"
+        signature = _build_signature()
+        body = f"{greeting}\n\n{body}\n{signature}"
         
         # Regex safety net
         placeholder_pattern = r'\[[A-Za-z][A-Za-z \'-]{1,20}\]'
@@ -182,13 +212,14 @@ def compose_follow_up(original_email_id: int) -> dict:
         subject = draft.subject
         body = draft.body
 
-        # Deterministic greeting
+        # Deterministic greeting and signature
         with get_connection() as conn:
             contact = conn.execute("SELECT * FROM contacts WHERE id = ?", (original["contact_id"],)).fetchone()
             contact = dict(contact) if contact else {}
         first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
         greeting = f"Hi {first_name}," if first_name else "Hi there,"
-        body = f"{greeting}\n\n{body}"
+        signature = _build_signature()
+        body = f"{greeting}\n\n{body}\n{signature}"
 
         # Regex safety net
         placeholder_pattern = r'\[[A-Za-z][A-Za-z \'-]{1,20}\]'
