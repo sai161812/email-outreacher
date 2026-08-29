@@ -54,16 +54,6 @@ CREATE TABLE IF NOT EXISTS emails (
     created_at            TEXT DEFAULT (datetime('now')),
     updated_at            TEXT DEFAULT (datetime('now'))
 );
-
-CREATE TABLE IF NOT EXISTS profile (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    full_name     TEXT,
-    email         TEXT,
-    phone         TEXT,
-    linkedin_url  TEXT,
-    github_url    TEXT,
-    portfolio_url TEXT
-);
 """
 
 # Columns added after the original release. Applied with ALTER TABLE so
@@ -71,6 +61,17 @@ CREATE TABLE IF NOT EXISTS profile (
 # in place instead of breaking.
 MIGRATIONS = [
     "ALTER TABLE emails ADD COLUMN follow_up_to_email_id INTEGER REFERENCES emails(id)",
+    """CREATE TABLE IF NOT EXISTS profile (
+    id            INTEGER PRIMARY KEY CHECK (id = 1),
+    full_name     TEXT NOT NULL,
+    email         TEXT,
+    phone         TEXT,
+    linkedin_url  TEXT,
+    github_url    TEXT,
+    portfolio_url TEXT,
+    updated_at    TEXT DEFAULT (datetime('now'))
+    )""",
+    "ALTER TABLE emails ADD COLUMN qc_warnings TEXT",
 ]
 
 
