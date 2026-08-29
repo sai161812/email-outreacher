@@ -28,12 +28,34 @@ def _sent_today_count():
         return row["n"]
 
 
+import re
+import profile
+
+
+def _get_personalized_attachment_name(company_name, fallback_path):
+    p = profile.get_profile()
+    name_prefix = "Resume"
+    if p and p.get("full_name"):
+        parts = [re.sub(r"[^\w\-]", "", part) for part in p["full_name"].strip().split() if part.strip()]
+        if len(parts) >= 2:
+            name_prefix = f"{parts[0]}_{parts[-1]}_Resume"
+        elif len(parts) == 1:
+            name_prefix = f"{parts[0]}_Resume"
+            
+    clean_company = re.sub(r"[^\w\-]", "", (company_name or "").strip())
+    if clean_company:
+        return f"{name_prefix}_{clean_company}.pdf"
+    return f"{name_prefix}.pdf" if name_prefix != "Resume" else Path(fallback_path).name
+
+
 def get_approved_queue():
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT e.*, c.email as contact_email, rv.file_path as resume_path "
+            "SELECT e.*, c.name as company_name, ct.name as contact_name, ct.email as contact_email, "
+            "rv.file_path as resume_path, rv.resume_url "
             "FROM emails e "
-            "JOIN contacts c ON e.contact_id = c.id "
+            "JOIN companies c ON e.company_id = c.id "
+            "JOIN contacts ct ON e.contact_id = ct.id "
             "LEFT JOIN resume_variants rv ON e.resume_variant_id = rv.id "
             "WHERE e.status = 'approved' "
             "ORDER BY e.updated_at ASC"
@@ -41,7 +63,7 @@ def get_approved_queue():
         return [dict(r) for r in rows]
 
 
-def _send_one(to_email, subject, body, resume_path=None):
+def _send_one(to_email, subject, body, resume_path=None, company_name=None):
     config.require_gmail_creds()
     msg = MIMEMultipart()
     msg["From"] = config.GMAIL_ADDRESS
@@ -49,10 +71,11 @@ def _send_one(to_email, subject, body, resume_path=None):
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
 
-    if resume_path and Path(resume_path).exists():
+    if config.RESUME_ATTACH_MODE == "attach" and resume_path and Path(resume_path).exists():
+        filename = _get_personalized_attachment_name(company_name, resume_path)
         with open(resume_path, "rb") as f:
-            part = MIMEApplication(f.read(), Name=Path(resume_path).name)
-        part["Content-Disposition"] = f'attachment; filename="{Path(resume_path).name}"'
+            part = MIMEApplication(f.read(), Name=filename)
+        part["Content-Disposition"] = f'attachment; filename="{filename}"'
         msg.attach(part)
 
     context = ssl.create_default_context()
@@ -86,7 +109,7 @@ def run_send_batch(dry_run=False):
             continue
 
         try:
-            _send_one(item["contact_email"], item["subject"], item["body"], item.get("resume_path"))
+            _send_one(item["contact_email"], item["subject"], item["body"], item.get("resume_path"), item.get("company_name"))
             with get_connection() as conn:
                 conn.execute(
                     "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ?",

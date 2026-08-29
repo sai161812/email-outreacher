@@ -72,6 +72,7 @@ MIGRATIONS = [
     updated_at    TEXT DEFAULT (datetime('now'))
     )""",
     "ALTER TABLE emails ADD COLUMN qc_warnings TEXT",
+    "ALTER TABLE resume_variants ADD COLUMN resume_url TEXT",
 ]
 
 

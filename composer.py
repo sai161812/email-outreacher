@@ -70,7 +70,7 @@ def _build_user_prompt(company: dict, contact: dict, candidate_context: str) -> 
     return "\n".join(parts)
 
 
-def _build_signature() -> str:
+def _build_signature(resume_url: str = None) -> str:
     p = profile.get_profile()
     if not p:
         print("Warning: No profile is configured. Run `set-profile` to add a signature block.")
@@ -87,6 +87,8 @@ def _build_signature() -> str:
         links.append(p["github_url"])
     if p.get("linkedin_url"):
         links.append(p["linkedin_url"])
+    if config.RESUME_ATTACH_MODE == "link" and resume_url:
+        links.append(f"Resume: {resume_url}")
         
     if links:
         lines.append("  |  ".join(links))
@@ -229,10 +231,17 @@ def compose_follow_up_and_store(original_email_id: int) -> int:
         contact = conn.execute("SELECT * FROM contacts WHERE id = ?", (original["contact_id"],)).fetchone()
         contact = dict(contact) if contact else {}
         
+    resume_url = None
+    if original.get("resume_variant_id"):
+        import resume
+        variant = resume.get_variant(original["resume_variant_id"])
+        if variant:
+            resume_url = variant.get("resume_url")
+
     # Assemble final body
     first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
     greeting = f"Hi {first_name}," if first_name else "Hi there,"
-    signature = _build_signature()
+    signature = _build_signature(resume_url=resume_url)
     final_body = f"{greeting}\n\n{result.get('body')}\n\n{signature}"
     final_subject = result.get("subject", "")
 
@@ -261,10 +270,17 @@ def compose_and_store(company_id: int, contact_id: int, candidate_context: str,
     contact = get_contact(contact_id)
     result = compose_email(company, contact, candidate_context)
 
+    resume_url = None
+    if resume_variant_id:
+        import resume
+        variant = resume.get_variant(resume_variant_id)
+        if variant:
+            resume_url = variant.get("resume_url")
+
     # Assemble final body
     first_name = contact.get("name", "").split()[0] if contact.get("name") else ""
     greeting = f"Hi {first_name}," if first_name else "Hi there,"
-    signature = _build_signature()
+    signature = _build_signature(resume_url=resume_url)
     final_body = f"{greeting}\n\n{result.get('body')}\n\n{signature}"
     final_subject = result.get("subject", "")
 
