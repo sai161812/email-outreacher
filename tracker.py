@@ -27,6 +27,22 @@ def mark_bounced(email_id):
             suppression.add(row["email"], "bounced")
 
 
+def mark_interview_scheduled(email_id):
+    _set_status(email_id, "interview_scheduled")
+
+
+def mark_interview_completed(email_id):
+    _set_status(email_id, "interview_completed")
+
+
+def mark_offer(email_id):
+    _set_status(email_id, "offer")
+
+
+def mark_no_offer(email_id):
+    _set_status(email_id, "no_offer")
+
+
 def _set_status(email_id, status):
     with get_connection() as conn:
         conn.execute(

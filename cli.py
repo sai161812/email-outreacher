@@ -166,6 +166,14 @@ def cmd_mark(args):
         tracker.mark_ghosted(args.email)
     elif args.result == "bounced":
         tracker.mark_bounced(args.email)
+    elif args.result == "interview_scheduled":
+        tracker.mark_interview_scheduled(args.email)
+    elif args.result == "interview_completed":
+        tracker.mark_interview_completed(args.email)
+    elif args.result == "offer":
+        tracker.mark_offer(args.email)
+    elif args.result == "no_offer":
+        tracker.mark_no_offer(args.email)
     print(f"Marked #{args.email} as {args.result}")
 
 
@@ -278,7 +286,19 @@ def build_parser():
 
     a = sub.add_parser("mark")
     a.add_argument("--email", type=int, required=True)
-    a.add_argument("--result", choices=["replied", "ghosted", "bounced"], required=True)
+    a.add_argument(
+        "--result",
+        choices=[
+            "replied",
+            "ghosted",
+            "bounced",
+            "interview_scheduled",
+            "interview_completed",
+            "offer",
+            "no_offer",
+        ],
+        required=True,
+    )
     a.set_defaults(func=cmd_mark)
 
     sub.add_parser("follow-ups").set_defaults(func=cmd_follow_ups)
