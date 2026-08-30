@@ -159,6 +159,29 @@ def cmd_status(args):
         print(f"{status}: {n}")
 
 
+def cmd_stats(args):
+    data = tracker.stats()
+
+    print("\n=== Stats by Resume Variant ===")
+    print(f"{'Variant':<20} {'Sent':>6} {'Replied':>8} {'Interviews':>11} {'Offers':>7} {'Reply %':>9} {'Interview %':>13} {'Offer %':>9}")
+    print("-" * 88)
+    for v in data["by_variant"]:
+        rep_rate = f"{v['reply_rate']:.1f}%" if v['sent'] > 0 else "0.0%"
+        int_rate = f"{v['interview_rate']:.1f}%" if v['sent'] > 0 else "0.0%"
+        off_rate = f"{v['offer_rate']:.1f}%" if v['sent'] > 0 else "0.0%"
+        print(f"{v['name']:<20} {v['sent']:>6} {v['replied']:>8} {v['interviews']:>11} {v['offers']:>7} {rep_rate:>9} {int_rate:>13} {off_rate:>9}")
+
+    print("\n=== Stats by Weekday ===")
+    print(f"{'Weekday':<10} {'Sent':>6} {'Replied':>8} {'Interviews':>11} {'Offers':>7} {'Reply %':>9} {'Interview %':>13} {'Offer %':>9}")
+    print("-" * 78)
+    for w in data["by_weekday"]:
+        rep_rate = f"{w['reply_rate']:.1f}%" if w['sent'] > 0 else "0.0%"
+        int_rate = f"{w['interview_rate']:.1f}%" if w['sent'] > 0 else "0.0%"
+        off_rate = f"{w['offer_rate']:.1f}%" if w['sent'] > 0 else "0.0%"
+        print(f"{w['weekday']:<10} {w['sent']:>6} {w['replied']:>8} {w['interviews']:>11} {w['offers']:>7} {rep_rate:>9} {int_rate:>13} {off_rate:>9}")
+    print()
+
+
 def cmd_mark(args):
     if args.result == "replied":
         tracker.mark_replied(args.email)
@@ -283,6 +306,7 @@ def build_parser():
     a.set_defaults(func=cmd_send)
 
     sub.add_parser("status").set_defaults(func=cmd_status)
+    sub.add_parser("stats").set_defaults(func=cmd_stats)
 
     a = sub.add_parser("mark")
     a.add_argument("--email", type=int, required=True)
