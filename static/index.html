@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outreach Terminal</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="nav-brand">OUTREACH_</div>
+        <nav id="sidebar-nav">
+            <div class="nav-item active" data-view="dashboard">Dashboard</div>
+            <div class="nav-item" data-view="contacts">Contacts</div>
+            <div class="nav-item" data-view="review">Review Queue</div>
+            <div class="nav-item" data-view="tracking">Tracking</div>
+        </nav>
+    </div>
+    
+    <div class="main-content">
+        <!-- Dashboard View -->
+        <div id="view-dashboard" class="view active">
+            <header>
+                <h1>Dashboard</h1>
+                <div class="button-group">
+                    <button id="btn-check-replies" class="secondary">Check Replies (IMAP)</button>
+                    <button id="btn-send-batch" class="primary">Send Approved Batch</button>
+                </div>
+            </header>
+            <div class="content-grid">
+                <div class="kpi-row" id="kpi-container">
+                    <!-- KPI Cards injected here -->
+                </div>
+                <div class="table-container" style="margin-top: 24px;">
+                    <table id="table-variant-stats">
+                        <thead>
+                            <tr>
+                                <th>Variant</th>
+                                <th class="col-num">Sent</th>
+                                <th class="col-num">Replied</th>
+                                <th class="col-num">Interviews</th>
+                                <th class="col-num">Reply %</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contacts View -->
+        <div id="view-contacts" class="view">
+            <header>
+                <h1>Contacts</h1>
+                <button id="btn-show-add-contact" class="primary">Add New</button>
+            </header>
+            <div class="table-container">
+                <table id="table-contacts">
+                    <thead>
+                        <tr>
+                            <th>Company</th>
+                            <th>Contact</th>
+                            <th>Email</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Review Queue View -->
+        <div id="view-review" class="view">
+            <header>
+                <h1>Review Queue</h1>
+            </header>
+            <div class="content-grid" id="review-container">
+                <!-- Draft cards injected here -->
+            </div>
+        </div>
+
+        <!-- Tracking View -->
+        <div id="view-tracking" class="view">
+            <header>
+                <h1>Tracking & Follow-ups</h1>
+            </header>
+            
+            <h4 style="margin-bottom: 12px; font-weight: 500; font-size: 14px;">Due for Follow-up</h4>
+            <div class="table-container" style="margin-bottom: 32px;">
+                <table id="table-due">
+                    <thead>
+                        <tr>
+                            <th>Company</th>
+                            <th>Email</th>
+                            <th>Sent Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <h4 style="margin-bottom: 12px; font-weight: 500; font-size: 14px;">All Sent Emails</h4>
+            <div class="table-container">
+                <table id="table-tracking">
+                    <thead>
+                        <tr>
+                            <th>Company</th>
+                            <th>Email</th>
+                            <th>Status</th>
+                            <th>Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal: Add Contact -->
+    <div id="modal-add-contact" class="modal-backdrop hidden">
+        <div class="modal-panel">
+            <div class="modal-header">Add Contact</div>
+            <div class="input-group">
+                <div class="input-label">Company ID</div>
+                <input type="text" id="add-company-id" placeholder="e.g. 1">
+            </div>
+            <div class="input-group">
+                <div class="input-label">Email</div>
+                <input type="text" id="add-email" placeholder="jane@example.com">
+            </div>
+            <div class="input-group">
+                <div class="input-label">Name</div>
+                <input type="text" id="add-name" placeholder="Jane Doe">
+            </div>
+            <div class="button-group" style="justify-content: flex-end; margin-top: 16px;">
+                <button class="secondary" id="btn-cancel-add-contact">Cancel</button>
+                <button class="primary" id="btn-save-contact">Save Contact</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+    
+    <script src="/static/app.js"></script>
+</body>
+</html>

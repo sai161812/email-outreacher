@@ -1,157 +1,121 @@
-from flask import Flask, render_template_string
+from flask import Flask, jsonify, request, send_from_directory
+import json
+import db, config, contacts, tracker, reviewer, composer, sender, replies, suppression
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', template_folder='templates')
 
-HTML = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Email Outreacher Terminal</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-</head>
-<body>
-    <div class="sidebar">
-        <div class="nav-brand">OUTREACH_</div>
-        <nav>
-            <a href="#" class="nav-item active">Dashboard</a>
-            <a href="#" class="nav-item">Contacts</a>
-            <a href="#" class="nav-item">Review Queue</a>
-            <a href="#" class="nav-item">Tracking</a>
-        </nav>
-    </div>
-    <div class="main-content">
-        <header>
-            <h1>Dashboard</h1>
-        </header>
-        <div class="content-grid">
-            <div class="kpi-row">
-                <div class="kpi-card">
-                    <div class="kpi-label"><span class="status-dot status-warning"></span> PENDING REVIEW</div>
-                    <div class="kpi-value">24</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label"><span class="status-dot status-success"></span> APPROVED</div>
-                    <div class="kpi-value">12</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label"><span class="status-dot status-neutral"></span> SENT</div>
-                    <div class="kpi-value">104</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label"><span class="status-dot status-success"></span> REPLIED</div>
-                    <div class="kpi-value">18</div>
-                </div>
-            </div>
-            
-            <div class="table-container" style="margin-top: 16px;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Variant</th>
-                            <th class="col-num">Sent</th>
-                            <th class="col-num">Replied</th>
-                            <th class="col-num">Interviews</th>
-                            <th class="col-num">Reply %</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Software Engineer (Backend)</td>
-                            <td class="col-num">45</td>
-                            <td class="col-num">8</td>
-                            <td class="col-num">2</td>
-                            <td class="col-num">17.8</td>
-                        </tr>
-                        <tr>
-                            <td>Data Scientist</td>
-                            <td class="col-num">32</td>
-                            <td class="col-num">5</td>
-                            <td class="col-num">1</td>
-                            <td class="col-num">15.6</td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <div class="dropdown-container">
-                                    <button class="secondary">
-                                        <span class="status-dot status-neutral"></span> Sent
-                                    </button>
-                                    <div class="dropdown-menu">
-                                        <div class="dropdown-item"><span class="status-dot status-success"></span> Replied</div>
-                                        <div class="dropdown-item"><span class="status-dot status-warning"></span> Interview Scheduled</div>
-                                        <div class="dropdown-item"><span class="status-dot status-danger"></span> Bounced</div>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="review-card has-warning" style="margin-top: 16px;">
-                <div class="review-card-header">
-                    <div>
-                        <div class="review-card-meta">PENDING REVIEW • ACME CORP</div>
-                        <div class="review-card-title">jane@acmecorp.com</div>
-                        <div class="qc-warning-text">QC Flag: Missing candidate context</div>
-                    </div>
-                </div>
-                
-                <div class="input-group">
-                    <div class="input-label">Subject</div>
-                    <input type="text" value="Question about the new payment API">
-                </div>
-                
-                <div class="input-group">
-                    <div class="input-label">Hook</div>
-                    <input type="text" value="Noticed you just rolled out the new GraphQL payment API—looks like a massive upgrade for latency.">
-                </div>
-                
-                <div class="input-group">
-                    <div class="input-label">Body</div>
-                    <textarea>I recently built a similar distributed caching layer for a Go microservice that handled 10k requests/sec, and I'd love to bring that experience to your backend team as an intern.
-
-Open to a brief chat later this week?</textarea>
-                </div>
-                
-                <div class="button-group">
-                    <button class="primary">Approve</button>
-                    <button class="secondary">Save Edits</button>
-                    <button class="secondary" style="color: var(--status-danger); border-color: transparent;">Reject</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Example Modal (hidden normally, displaying for showcase) -->
-    <!-- <div class="modal-backdrop">
-        <div class="modal-panel">
-            <div class="modal-header">Add New Company</div>
-            <div class="input-group">
-                <div class="input-label">Company Name</div>
-                <input type="text" placeholder="e.g. Acme Corp">
-            </div>
-            <div class="input-group">
-                <div class="input-label">Domain</div>
-                <input type="text" placeholder="acme.com">
-            </div>
-            <div class="button-group" style="justify-content: flex-end; margin-top: 16px;">
-                <button class="secondary">Cancel</button>
-                <button class="primary">Save</button>
-            </div>
-        </div>
-    </div> -->
-</body>
-</html>
-"""
-
-@app.route("/")
+@app.route('/')
 def index():
-    return render_template_string(HTML)
+    return send_from_directory('static', 'index.html')
+
+@app.route('/api/stats')
+def api_stats():
+    return jsonify({
+        "summary": tracker.pipeline_summary(),
+        "stats": tracker.stats()
+    })
+
+@app.route('/api/contacts')
+def api_list_contacts():
+    all_contacts = []
+    comps = contacts.list_companies()
+    for c in comps:
+        for ct in contacts.list_contacts(c["id"]):
+            ct["company_name"] = c["name"]
+            all_contacts.append(ct)
+    return jsonify(all_contacts)
+
+@app.route('/api/companies')
+def api_list_companies():
+    return jsonify(contacts.list_companies())
+
+@app.route('/api/companies', methods=['POST'])
+def api_add_company():
+    data = request.json
+    cid = contacts.add_company(data["name"], data.get("domain"), data.get("job_url"), data.get("job_text"), data.get("notes"))
+    return jsonify({"id": cid})
+
+@app.route('/api/contacts', methods=['POST'])
+def api_add_contact():
+    data = request.json
+    cid = contacts.add_contact(data["company_id"], data["email"], data.get("name"), data.get("title"), data.get("source"))
+    return jsonify({"id": cid})
+
+@app.route('/api/compose', methods=['POST'])
+def api_compose():
+    data = request.json
+    try:
+        eid = composer.compose_and_store(data["company_id"], data["contact_id"], data.get("context", ""), data.get("resume_variant_id"))
+        return jsonify({"id": eid})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route('/api/review')
+def api_review_list():
+    return jsonify(reviewer.list_pending())
+
+@app.route('/api/review/<int:email_id>', methods=['POST'])
+def api_review_action(email_id):
+    data = request.json
+    action = data.get("action")
+    if action == "approve":
+        reviewer.approve(email_id)
+    elif action == "reject":
+        reviewer.reject(email_id)
+    elif action == "edit":
+        reviewer.edit(email_id, subject=data.get("subject"), body=data.get("body"), hook=data.get("hook"))
+    return jsonify({"success": True})
+
+@app.route('/api/tracking')
+def api_tracking_list():
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT e.*, c.name as company_name, ct.email as contact_email "
+            "FROM emails e "
+            "JOIN companies c ON e.company_id = c.id "
+            "JOIN contacts ct ON e.contact_id = ct.id "
+            "WHERE e.status NOT IN ('pending_review') ORDER BY e.updated_at DESC"
+        ).fetchall()
+        return jsonify([dict(r) for r in rows])
+
+@app.route('/api/tracking/due')
+def api_tracking_due():
+    return jsonify(tracker.due_for_follow_up())
+
+@app.route('/api/tracking/<int:email_id>/mark', methods=['POST'])
+def api_tracking_mark(email_id):
+    status = request.json.get("status")
+    # map status
+    if status == "replied": tracker.mark_replied(email_id)
+    elif status == "ghosted": tracker.mark_ghosted(email_id)
+    elif status == "bounced": tracker.mark_bounced(email_id)
+    elif status == "interview_scheduled": tracker.mark_interview_scheduled(email_id)
+    elif status == "interview_completed": tracker.mark_interview_completed(email_id)
+    elif status == "offer": tracker.mark_offer(email_id)
+    elif status == "no_offer": tracker.mark_no_offer(email_id)
+    return jsonify({"success": True})
+
+@app.route('/api/tracking/<int:email_id>/followup', methods=['POST'])
+def api_tracking_followup(email_id):
+    try:
+        eid = composer.compose_follow_up_and_store(email_id)
+        return jsonify({"id": eid})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route('/api/send', methods=['POST'])
+def api_send_batch():
+    summary = sender.run_send_batch(dry_run=False, force=False)
+    return jsonify({"summary": summary})
+
+@app.route('/api/check_replies', methods=['POST'])
+def api_check_replies():
+    try:
+        matches = replies.check_replies(dry_run=False)
+        return jsonify({"matches": matches})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 if __name__ == "__main__":
+    db.init_db()
     app.run(debug=True, port=5000)
