@@ -146,7 +146,8 @@ def cmd_reject(args):
 
 
 def cmd_edit(args):
-    reviewer.edit(args.email, subject=args.subject, body=args.body_file and Path(args.body_file).read_text())
+    body = Path(args.body_file).read_text() if args.body_file else None
+    reviewer.edit(args.email, subject=args.subject, body=body, hook=args.hook)
     print(f"Updated #{args.email}")
 
 
@@ -313,6 +314,7 @@ def build_parser():
     a.add_argument("--email", type=int, required=True)
     a.add_argument("--subject")
     a.add_argument("--body-file")
+    a.add_argument("--hook")
     a.set_defaults(func=cmd_edit)
 
     a = sub.add_parser("send")
