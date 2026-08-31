@@ -17,11 +17,12 @@ RESUME_ATTACH_MODE = os.getenv("RESUME_ATTACH_MODE", "attach").lower()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-3.1-pro-preview"
 
-# --- Gmail SMTP sending ---
+# --- Gmail SMTP / IMAP ---
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
+IMAP_HOST = os.getenv("IMAP_HOST", "imap.gmail.com")
 
 # --- Rate limiting (protects your sender reputation) ---
 DAILY_SEND_CAP = int(os.getenv("DAILY_SEND_CAP", "15"))
