@@ -201,3 +201,116 @@ td {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
 }
+
+/* Review Queue Cards */
+.review-card {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.review-card.has-warning {
+    border-left: 4px solid var(--status-warning);
+}
+
+.review-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.review-card-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.review-card-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-top: 4px;
+}
+
+.qc-warning-text {
+    font-size: 12px;
+    color: var(--status-warning);
+    margin-top: 4px;
+}
+
+/* Inputs and Buttons */
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.input-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+}
+
+input[type="text"], textarea {
+    background-color: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    padding: 8px 12px;
+    transition: border-color 150ms ease;
+}
+
+input[type="text"]:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.button-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+button {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+button.primary {
+    background-color: var(--accent);
+    color: var(--bg-base);
+    border: 1px solid var(--accent);
+}
+
+button.primary:hover {
+    background-color: #5bb3e6;
+    border-color: #5bb3e6;
+}
+
+button.secondary {
+    background-color: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+button.secondary:hover {
+    background-color: var(--bg-hover);
+}

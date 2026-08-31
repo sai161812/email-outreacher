@@ -84,6 +84,39 @@ HTML = """
                     </tbody>
                 </table>
             </div>
+
+            <div class="review-card has-warning" style="margin-top: 16px;">
+                <div class="review-card-header">
+                    <div>
+                        <div class="review-card-meta">PENDING REVIEW • ACME CORP</div>
+                        <div class="review-card-title">jane@acmecorp.com</div>
+                        <div class="qc-warning-text">QC Flag: Missing candidate context</div>
+                    </div>
+                </div>
+                
+                <div class="input-group">
+                    <div class="input-label">Subject</div>
+                    <input type="text" value="Question about the new payment API">
+                </div>
+                
+                <div class="input-group">
+                    <div class="input-label">Hook</div>
+                    <input type="text" value="Noticed you just rolled out the new GraphQL payment API—looks like a massive upgrade for latency.">
+                </div>
+                
+                <div class="input-group">
+                    <div class="input-label">Body</div>
+                    <textarea>I recently built a similar distributed caching layer for a Go microservice that handled 10k requests/sec, and I'd love to bring that experience to your backend team as an intern.
+
+Open to a brief chat later this week?</textarea>
+                </div>
+                
+                <div class="button-group">
+                    <button class="primary">Approve</button>
+                    <button class="secondary">Save Edits</button>
+                    <button class="secondary" style="color: var(--status-danger); border-color: transparent;">Reject</button>
+                </div>
+            </div>
         </div>
     </div>
 </body>
