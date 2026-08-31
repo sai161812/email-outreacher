@@ -38,6 +38,11 @@ cp .env.example .env
 #   GMAIL_APP_PASSWORD   - generate at https://myaccount.google.com/apppasswords
 #                          (requires 2-Step Verification turned on)
 
+> **IMPORTANT — Enable IMAP in Gmail**:
+> You must manually enable IMAP access in your Gmail account for automatic reply detection (`check-replies`) to work.
+> Go to **Gmail → Settings (gear icon) → See all settings → Forwarding and POP/IMAP → Enable IMAP** and click **Save Changes**.
+> IMAP is disabled by default on new accounts and is a common silent failure point.
+
 python cli.py init
 ```
 
@@ -115,8 +120,15 @@ AI draft that needs your eyes before it goes out.
 # Check overall pipeline counts any time
 python cli.py status
 
-# As you check your own inbox, record what happened
-python cli.py mark --email 1 --result replied     # or: ghosted / bounced
+# Check detailed stats by resume variant and weekday
+python cli.py stats
+
+# Check your Gmail inbox automatically for replies
+python cli.py check-replies --dry-run
+python cli.py check-replies
+
+# As you check your own inbox, record what happened manually
+python cli.py mark --email 1 --result replied     # or: ghosted / bounced / interview_scheduled / offer
 
 # See who's gone quiet and might need a nudge
 python cli.py follow-ups
@@ -142,9 +154,12 @@ python cli.py follow-up --email 1
 | `approve` / `reject` | Moves a draft to `approved` (sendable) or `rejected`. |
 | `send` | Sends everything `approved`, capped per day with random delays. Use `--dry-run` to preview. |
 | `status` | Counts of emails by status. |
-| `mark` | Manually record `replied` / `ghosted` / `bounced` after checking your inbox. |
+| `stats` | Performance rates broken down by resume variant and weekday sent. |
+| `check-replies` | Checks Gmail INBOX via IMAP for replies and automatically updates status to `replied`. |
+| `mark` | Manually record outcomes (`replied`, `interview_scheduled`, `offer`, etc.). |
 | `follow-ups` | Lists sent emails with no reply past the follow-up window, excluding ones already followed up on. |
 | `follow-up` | Drafts a short nudge referencing an original sent email. Only works on emails with status `sent`/`replied`/`ghosted`. |
+| `suppress` / `unsuppress` / `list-suppressed` | Manage contact suppressions to prevent emailing opted-out or bounced contacts. |
 
 ## Known limitations (by design, for v1)
 
