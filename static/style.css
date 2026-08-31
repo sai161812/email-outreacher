@@ -106,3 +106,51 @@ header h1 {
     display: grid;
     gap: 16px;
 }
+
+/* KPI Cards */
+.kpi-row {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+}
+
+.kpi-card {
+    flex: 1;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.kpi-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+}
+
+.kpi-value {
+    font-family: var(--font-mono);
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-success { background-color: var(--status-success); }
+.status-warning { background-color: var(--status-warning); }
+.status-danger { background-color: var(--status-danger); }
+.status-neutral { background-color: var(--status-neutral); }
