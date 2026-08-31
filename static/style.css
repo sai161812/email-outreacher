@@ -262,7 +262,7 @@ td {
 
 .qc-warning-text {
     font-size: 11px;
-    color: var(--status-warning);
+    color: var(--text-secondary);
     margin-top: 4px;
 }
 
