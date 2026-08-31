@@ -260,7 +260,12 @@ def compose_follow_up_and_store(original_email_id: int) -> int:
         final_subject = f"Re: {original['subject']}"
 
     # Run QC checks
-    warnings = qc.detect_placeholders(final_subject) + qc.detect_placeholders(final_body)
+    warnings = (
+        qc.detect_placeholders(final_subject) + 
+        qc.detect_placeholders(final_body) +
+        qc.check_subject(final_subject) +
+        qc.check_body(final_body)
+    )
     qc_warnings_str = ";".join(warnings) if warnings else None
 
     with get_connection() as conn:
@@ -303,7 +308,12 @@ def compose_and_store(company_id: int, contact_id: int, candidate_context: str,
     final_subject = result.get("subject", "")
 
     # Run QC checks
-    warnings = qc.detect_placeholders(final_subject) + qc.detect_placeholders(final_body)
+    warnings = (
+        qc.detect_placeholders(final_subject) + 
+        qc.detect_placeholders(final_body) +
+        qc.check_subject(final_subject) +
+        qc.check_body(final_body)
+    )
     qc_warnings_str = ";".join(warnings) if warnings else None
 
     with get_connection() as conn:
