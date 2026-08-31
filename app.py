@@ -75,11 +75,18 @@ HTML = """
                             <td class="col-num">15.6</td>
                         </tr>
                         <tr>
-                            <td>Unassigned</td>
-                            <td class="col-num">27</td>
-                            <td class="col-num">5</td>
-                            <td class="col-num">0</td>
-                            <td class="col-num">18.5</td>
+                            <td>
+                                <div class="dropdown-container">
+                                    <button class="secondary">
+                                        <span class="status-dot status-neutral"></span> Sent
+                                    </button>
+                                    <div class="dropdown-menu">
+                                        <div class="dropdown-item"><span class="status-dot status-success"></span> Replied</div>
+                                        <div class="dropdown-item"><span class="status-dot status-warning"></span> Interview Scheduled</div>
+                                        <div class="dropdown-item"><span class="status-dot status-danger"></span> Bounced</div>
+                                    </div>
+                                </div>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -119,6 +126,25 @@ Open to a brief chat later this week?</textarea>
             </div>
         </div>
     </div>
+    
+    <!-- Example Modal (hidden normally, displaying for showcase) -->
+    <!-- <div class="modal-backdrop">
+        <div class="modal-panel">
+            <div class="modal-header">Add New Company</div>
+            <div class="input-group">
+                <div class="input-label">Company Name</div>
+                <input type="text" placeholder="e.g. Acme Corp">
+            </div>
+            <div class="input-group">
+                <div class="input-label">Domain</div>
+                <input type="text" placeholder="acme.com">
+            </div>
+            <div class="button-group" style="justify-content: flex-end; margin-top: 16px;">
+                <button class="secondary">Cancel</button>
+                <button class="primary">Save</button>
+            </div>
+        </div>
+    </div> -->
 </body>
 </html>
 """
