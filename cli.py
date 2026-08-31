@@ -26,6 +26,7 @@ import sender
 import tracker
 import suppression
 import profile
+import replies
 
 
 def cmd_set_profile(args):
@@ -227,6 +228,20 @@ def cmd_list_suppressed(args):
         print(f"{r['email']}{reason} - {r['created_at']}")
 
 
+def cmd_check_replies(args):
+    matches = replies.check_replies(dry_run=args.dry_run)
+    if not matches:
+        print("No new replies found.")
+        return
+
+    prefix = "[DRY RUN] Would mark" if args.dry_run else "Marked"
+    print(f"\nFound {len(matches)} reply(ies):")
+    for m in matches:
+        name_str = f" ({m['contact_name']})" if m.get("contact_name") else ""
+        print(f"  {prefix} #{m['email_id']} to {m['contact_email']}{name_str} as replied (matched via {m['match_type']})")
+    print()
+
+
 def build_parser():
     p = argparse.ArgumentParser(description="Internship outreach tool")
     sub = p.add_subparsers(dest="command", required=True)
@@ -341,6 +356,10 @@ def build_parser():
     a.set_defaults(func=cmd_unsuppress)
 
     sub.add_parser("list-suppressed").set_defaults(func=cmd_list_suppressed)
+
+    a = sub.add_parser("check-replies", help="Check IMAP inbox for replies to sent outreach emails")
+    a.add_argument("--dry-run", action="store_true", help="preview matched replies without updating database")
+    a.set_defaults(func=cmd_check_replies)
 
     return p
 
