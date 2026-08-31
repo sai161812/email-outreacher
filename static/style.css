@@ -2,11 +2,15 @@
     --bg-base: #0B0D10;
     --bg-surface: #16191F;
     --bg-hover: #1D2027;
-    --border: #242830;
     
-    --text-primary: #E6E8EB;
-    --text-secondary: #8B909A;
-    --text-disabled: #4E525C;
+    --white-92: rgba(255, 255, 255, 0.92);
+    --white-78: rgba(255, 255, 255, 0.78);
+    --white-55: rgba(255, 255, 255, 0.55);
+    --white-40: rgba(255, 255, 255, 0.40);
+    --white-22: rgba(255, 255, 255, 0.22);
+    --white-08: rgba(255, 255, 255, 0.08);
+
+    --border: var(--white-08);
     
     --accent: #4FA6D9;
     
@@ -27,7 +31,7 @@
 
 body {
     background-color: var(--bg-base);
-    color: var(--text-primary);
+    color: var(--white-55);
     font-family: var(--font-ui);
     font-size: 13px;
     font-weight: 400;
@@ -38,12 +42,15 @@ body {
 
 h1, h2, h3, h4 {
     font-weight: 500;
+    color: var(--white-92);
 }
 
 /* Typography elements */
 .mono-num {
     font-family: var(--font-mono);
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
 }
 
 a {
@@ -65,10 +72,10 @@ a:hover {
 
 .nav-brand {
     padding: 24px 16px;
-    font-family: var(--font-mono);
+    font-family: var(--font-ui);
     font-weight: 500;
     font-size: 14px;
-    color: var(--text-primary);
+    color: var(--white-92);
     letter-spacing: 0.02em;
 }
 
@@ -80,7 +87,7 @@ nav {
 .nav-item {
     padding: 8px 16px;
     margin-bottom: 0;
-    color: var(--text-secondary);
+    color: var(--white-55);
     text-decoration: none;
     border-left: 2px solid transparent;
     transition: background-color 120ms ease, color 120ms ease;
@@ -89,6 +96,7 @@ nav {
 
 .nav-item:hover {
     background-color: var(--bg-hover);
+    color: var(--white-78);
 }
 
 .nav-item.active {
@@ -116,6 +124,7 @@ header {
 header h1 {
     font-size: 18px;
     margin: 0;
+    color: var(--white-92);
 }
 
 /* Views (SPA) */
@@ -153,15 +162,13 @@ header h1 {
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.02em;
-    color: var(--text-secondary);
+    color: var(--white-40);
     font-weight: 500;
 }
 
 .kpi-value {
-    font-family: var(--font-mono);
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--text-primary);
+    font-size: 28px;
+    color: var(--white-78);
 }
 
 /* Status colors (Dot) */
@@ -210,7 +217,7 @@ tr:last-child th, tr:last-child td {
 
 th {
     background-color: var(--bg-surface);
-    color: var(--text-secondary);
+    color: var(--white-40);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.02em;
@@ -221,7 +228,15 @@ th {
 }
 
 td {
-    color: var(--text-primary);
+    color: var(--white-78);
+}
+
+.col-num {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
 }
 
 /* Cards (Review/Draft) */
@@ -247,7 +262,7 @@ td {
 
 .review-card-meta {
     font-size: 11px;
-    color: var(--text-secondary);
+    color: var(--white-40);
     text-transform: uppercase;
     letter-spacing: 0.02em;
 }
@@ -255,14 +270,14 @@ td {
 .review-card-title {
     font-size: 14px;
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--white-78);
     margin-top: 4px;
     font-family: var(--font-mono);
 }
 
 .qc-warning-text {
     font-size: 11px;
-    color: var(--text-secondary);
+    color: var(--white-55);
     margin-top: 4px;
 }
 
@@ -277,14 +292,14 @@ td {
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.02em;
-    color: var(--text-secondary);
+    color: var(--white-40);
 }
 
 input[type="text"], textarea {
     background-color: var(--bg-base);
     border: 1px solid var(--border);
     border-radius: 4px;
-    color: var(--text-primary);
+    color: var(--white-78);
     font-family: var(--font-ui);
     font-size: 13px;
     padding: 8px 12px;
@@ -294,6 +309,10 @@ input[type="text"], textarea {
 input[type="text"]:focus, textarea:focus {
     outline: none;
     border-color: var(--accent);
+}
+
+input::placeholder, textarea::placeholder {
+    color: var(--white-22);
 }
 
 textarea {
@@ -329,7 +348,7 @@ button.primary:hover {
 
 button.secondary {
     background-color: transparent;
-    color: var(--text-primary);
+    color: var(--white-78);
     border: 1px solid var(--border);
 }
 button.secondary:hover {
@@ -339,7 +358,7 @@ button.secondary:hover {
 button.destructive {
     background-color: transparent;
     color: var(--status-danger);
-    border: 1px solid transparent; /* or none depending on spec, spec says no border fill change except on hover */
+    border: 1px solid transparent; 
 }
 button.destructive:hover {
     background-color: var(--bg-hover);
@@ -380,7 +399,7 @@ button:disabled {
 .modal-header {
     font-size: 16px;
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--white-92);
     margin-bottom: 8px;
 }
 
@@ -411,7 +430,7 @@ button:disabled {
 .dropdown-item {
     padding: 6px 12px;
     font-size: 13px;
-    color: var(--text-primary);
+    color: var(--white-78);
     display: flex;
     align-items: center;
     cursor: pointer;
@@ -437,7 +456,7 @@ button:disabled {
 .toast {
     background-color: var(--bg-surface);
     border: 1px solid var(--border);
-    color: var(--text-primary);
+    color: var(--white-78);
     padding: 12px 16px;
     border-radius: 4px;
     font-size: 13px;
