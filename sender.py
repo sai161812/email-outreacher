@@ -61,7 +61,7 @@ def get_approved_queue():
             "JOIN contacts ct ON e.contact_id = ct.id "
             "LEFT JOIN resume_variants rv ON e.resume_variant_id = rv.id "
             "WHERE e.status = 'approved' "
-            "ORDER BY e.updated_at ASC"
+            "ORDER BY CASE WHEN LOWER(ct.source) LIKE '%referral%' THEN 0 ELSE 1 END ASC, e.updated_at ASC"
         ).fetchall()
         return [dict(r) for r in rows]
 
