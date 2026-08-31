@@ -107,33 +107,36 @@ def compose_email(company: dict, contact: dict, candidate_context: str) -> dict:
 
     user_prompt = _build_user_prompt(company, contact, candidate_context)
 
-    response = client.models.generate_content(
-        model=config.GEMINI_MODEL,
-        contents=user_prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            tools=[types.Tool(google_search=types.GoogleSearch())],
-            response_mime_type="application/json",
-            response_schema=EmailDraft,
-        ),
-    )
+    for attempt in range(2):
+        response = client.models.generate_content(
+            model=config.GEMINI_MODEL,
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                response_mime_type="application/json",
+                response_schema=EmailDraft,
+            ),
+        )
 
-    try:
-        draft = response.parsed
-        return {
-            "hook": draft.hook,
-            "subject": draft.subject,
-            "body": draft.body,
-            "research_notes": draft.research_notes,
-        }
-    except Exception as e:
-        full_text = response.text or ""
-        return {
-            "hook": "PARSE_ERROR",
-            "subject": "(needs manual fix)",
-            "body": f"Failed to parse structured output: {e}\n\n{full_text}",
-            "research_notes": "Model output parsing failed.",
-        }
+        try:
+            draft = response.parsed
+            return {
+                "hook": draft.hook,
+                "subject": draft.subject,
+                "body": draft.body,
+                "research_notes": draft.research_notes,
+            }
+        except Exception as e:
+            if attempt == 0:
+                continue
+            full_text = response.text or ""
+            return {
+                "hook": "PARSE_ERROR",
+                "subject": "(needs manual fix)",
+                "body": f"Failed to parse structured output: {e}\n\n{full_text}",
+                "research_notes": "Model output parsing failed.",
+            }
 
 
 class FollowUpDraft(BaseModel):
@@ -183,28 +186,33 @@ def compose_follow_up(original_email_id: int) -> dict:
         f"Original hook used: {original.get('hook')}\n"
     )
 
-    response = client.models.generate_content(
-        model=config.GEMINI_MODEL,
-        contents=user_prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=FOLLOW_UP_SYSTEM_PROMPT,
-            response_mime_type="application/json",
-            response_schema=FollowUpDraft,
-        ),
-    )
+    for attempt in range(2):
+        response = client.models.generate_content(
+            model=config.GEMINI_MODEL,
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=FOLLOW_UP_SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=FollowUpDraft,
+            ),
+        )
 
-    try:
-        draft = response.parsed
-        result = {
-            "subject": draft.subject,
-            "body": draft.body,
-        }
-    except Exception as e:
-        full_text = response.text or ""
-        result = {
-            "subject": "(needs manual fix)",
-            "body": f"Failed to parse structured output: {e}\n\n{full_text}",
-        }
+        try:
+            draft = response.parsed
+            result = {
+                "subject": draft.subject,
+                "body": draft.body,
+            }
+            break
+        except Exception as e:
+            if attempt == 0:
+                continue
+            full_text = response.text or ""
+            result = {
+                "subject": "(needs manual fix)",
+                "body": f"Failed to parse structured output: {e}\n\n{full_text}",
+            }
+    
     result["hook"] = original.get("hook")  # carry the original hook forward for reference
     return result
 
