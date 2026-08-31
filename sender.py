@@ -66,11 +66,10 @@ def get_approved_queue():
         return [dict(r) for r in rows]
 
 
-def _send_one(to_email, subject, body, resume_path=None, company_name=None, in_reply_to=None, resume_url=None, attach_mode=None):
+def _send_one(server, to_email, subject, body, resume_path=None, company_name=None, in_reply_to=None, resume_url=None, attach_mode=None):
     if attach_mode is None:
         attach_mode = config.RESUME_ATTACH_MODE
 
-    config.require_gmail_creds()
     msg = MIMEMultipart()
     msg_id = make_msgid()
     msg["Message-ID"] = msg_id
@@ -95,11 +94,7 @@ def _send_one(to_email, subject, body, resume_path=None, company_name=None, in_r
         part["Content-Disposition"] = f'attachment; filename="{filename}"'
         msg.attach(part)
 
-    context = ssl.create_default_context()
-    with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT) as server:
-        server.starttls(context=context)
-        server.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
-        server.sendmail(config.GMAIL_ADDRESS, to_email, msg.as_string())
+    server.sendmail(config.GMAIL_ADDRESS, to_email, msg.as_string())
 
     return msg_id
 
@@ -165,62 +160,89 @@ def run_send_batch(dry_run=False, force=False):
     if len(queue) > len(batch):
         print(f"{len(queue) - len(batch)} approved emails held back — daily cap reached.")
 
-    for i, item in enumerate(batch):
-        if suppression.is_suppressed(item["contact_email"]):
-            print(f"Skipping #{item['id']}: suppressed email '{item['contact_email']}'")
-            summary.append((item["id"], "skipped-suppressed"))
-            continue
+    server = None
+    if not dry_run and batch:
+        config.require_gmail_creds()
+        context = ssl.create_default_context()
+        server = smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT)
+        server.starttls(context=context)
+        server.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
 
-        subject = item["subject"]
-        in_reply_to = None
+    try:
+        for i, item in enumerate(batch):
+            if suppression.is_suppressed(item["contact_email"]):
+                print(f"Skipping #{item['id']}: suppressed email '{item['contact_email']}'")
+                summary.append((item["id"], "skipped-suppressed"))
+                continue
 
-        if item.get("follow_up_to_email_id"):
-            with get_connection() as conn:
-                original = conn.execute(
-                    "SELECT message_id, subject FROM emails WHERE id = ?",
-                    (item["follow_up_to_email_id"],)
-                ).fetchone()
-                if original:
-                    in_reply_to = original["message_id"]
-                    orig_subj = original["subject"] or ""
-                    if not subject.lower().startswith("re:"):
-                        subject = f"Re: {orig_subj}" if orig_subj else f"Re: {subject}"
+            subject = item["subject"]
+            in_reply_to = None
 
-        if not validate.is_valid_syntax(item["contact_email"]):
-            print(f"Skipping #{item['id']}: invalid email format '{item['contact_email']}'")
-            summary.append((item["id"], "error: invalid email format"))
-            continue
+            if item.get("follow_up_to_email_id"):
+                with get_connection() as conn:
+                    original = conn.execute(
+                        "SELECT message_id, subject FROM emails WHERE id = ?",
+                        (item["follow_up_to_email_id"],)
+                    ).fetchone()
+                    if original:
+                        in_reply_to = original["message_id"]
+                        orig_subj = original["subject"] or ""
+                        if not subject.lower().startswith("re:"):
+                            subject = f"Re: {orig_subj}" if orig_subj else f"Re: {subject}"
 
-        if dry_run:
-            print(f"[DRY RUN] Would send to {item['contact_email']} — {subject}")
-            summary.append((item["id"], "dry_run"))
-            continue
+            if not validate.is_valid_syntax(item["contact_email"]):
+                print(f"Skipping #{item['id']}: invalid email format '{item['contact_email']}'")
+                summary.append((item["id"], "error: invalid email format"))
+                continue
 
-        try:
-            msg_id = _send_one(
-                item["contact_email"],
-                subject,
-                item["body"],
-                resume_path=item.get("resume_path"),
-                company_name=item.get("company_name"),
-                in_reply_to=in_reply_to,
-                resume_url=item.get("resume_url"),
-                attach_mode=config.RESUME_ATTACH_MODE,
-            )
-            with get_connection() as conn:
-                conn.execute(
-                    "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ?, message_id = ?, subject = ? WHERE id = ?",
-                    (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), msg_id, subject, item["id"]),
-                )
-            print(f"Sent to {item['contact_email']} ({subject})")
-            summary.append((item["id"], "sent"))
-        except Exception as e:
-            print(f"FAILED to send to {item['contact_email']}: {e}")
-            summary.append((item["id"], f"error: {e}"))
+            if dry_run:
+                print(f"[DRY RUN] Would send to {item['contact_email']} — {subject}")
+                summary.append((item["id"], "dry_run"))
+                continue
 
-        if i < len(batch) - 1:
-            delay = random.randint(config.MIN_DELAY_SECONDS, config.MAX_DELAY_SECONDS)
-            print(f"Waiting {delay}s before next send...")
-            time.sleep(delay)
+            success = False
+            for attempt in range(2):
+                try:
+                    msg_id = _send_one(
+                        server,
+                        item["contact_email"],
+                        subject,
+                        item["body"],
+                        resume_path=item.get("resume_path"),
+                        company_name=item.get("company_name"),
+                        in_reply_to=in_reply_to,
+                        resume_url=item.get("resume_url"),
+                        attach_mode=config.RESUME_ATTACH_MODE,
+                    )
+                    with get_connection() as conn:
+                        conn.execute(
+                            "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ?, message_id = ?, subject = ? WHERE id = ?",
+                            (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), msg_id, subject, item["id"]),
+                        )
+                    print(f"Sent to {item['contact_email']} ({subject})")
+                    summary.append((item["id"], "sent"))
+                    success = True
+                    break
+                except Exception as e:
+                    if attempt == 0:
+                        print(f"Transient error sending to {item['contact_email']}: {e}. Retrying in 5 seconds...")
+                        time.sleep(5)
+                    else:
+                        print(f"FAILED to send to {item['contact_email']}: {e}")
+                        summary.append((item["id"], f"error: {e}"))
+            
+            if not success:
+                pass  # Error already appended to summary
+
+            if i < len(batch) - 1:
+                delay = random.randint(config.MIN_DELAY_SECONDS, config.MAX_DELAY_SECONDS)
+                print(f"Waiting {delay}s before next send...")
+                time.sleep(delay)
+    finally:
+        if server:
+            try:
+                server.quit()
+            except Exception:
+                pass
 
     return summary
