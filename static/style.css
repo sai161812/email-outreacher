@@ -37,7 +37,21 @@ body {
 }
 
 h1, h2, h3, h4 {
-    font-weight: 600;
+    font-weight: 500;
+}
+
+/* Typography elements */
+.mono-num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
 }
 
 /* Sidebar */
@@ -52,7 +66,7 @@ h1, h2, h3, h4 {
 .nav-brand {
     padding: 24px 16px;
     font-family: var(--font-mono);
-    font-weight: 600;
+    font-weight: 500;
     font-size: 14px;
     color: var(--text-primary);
     letter-spacing: 0.02em;
@@ -61,27 +75,24 @@ h1, h2, h3, h4 {
 nav {
     display: flex;
     flex-direction: column;
-    padding: 0 8px;
 }
 
 .nav-item {
-    padding: 8px 12px;
-    margin-bottom: 4px;
+    padding: 8px 16px;
+    margin-bottom: 0;
     color: var(--text-secondary);
     text-decoration: none;
-    border-radius: 4px;
     border-left: 2px solid transparent;
-    transition: background-color 150ms ease, color 150ms ease;
+    transition: background-color 120ms ease, color 120ms ease;
+    cursor: pointer;
 }
 
 .nav-item:hover {
     background-color: var(--bg-hover);
-    color: var(--text-primary);
 }
 
 .nav-item.active {
-    background-color: var(--bg-surface);
-    color: var(--text-primary);
+    color: var(--accent);
     border-left-color: var(--accent);
 }
 
@@ -91,15 +102,28 @@ nav {
     display: flex;
     flex-direction: column;
     padding: 24px;
+    overflow-y: auto;
+    height: 100vh;
 }
 
 header {
     margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 header h1 {
     font-size: 18px;
     margin: 0;
+}
+
+/* Views (SPA) */
+.view {
+    display: none;
+}
+.view.active {
+    display: block;
 }
 
 .content-grid {
@@ -118,7 +142,7 @@ header h1 {
     flex: 1;
     background-color: var(--bg-surface);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 16px;
     display: flex;
     flex-direction: column;
@@ -130,36 +154,39 @@ header h1 {
     text-transform: uppercase;
     letter-spacing: 0.02em;
     color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    gap: 6px;
     font-weight: 500;
 }
 
 .kpi-value {
     font-family: var(--font-mono);
     font-size: 24px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-primary);
 }
 
+/* Status colors (Dot) */
 .status-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
     display: inline-block;
+    margin-right: 6px;
 }
+.status-dot.success { background-color: var(--status-success); }
+.status-dot.warning { background-color: var(--status-warning); }
+.status-dot.danger { background-color: var(--status-danger); }
+.status-dot.neutral { background-color: var(--status-neutral); }
 
-.status-success { background-color: var(--status-success); }
-.status-warning { background-color: var(--status-warning); }
-.status-danger { background-color: var(--status-danger); }
-.status-neutral { background-color: var(--status-neutral); }
+.status-text.success { color: var(--status-success); }
+.status-text.warning { color: var(--status-warning); }
+.status-text.danger { color: var(--status-danger); }
+.status-text.neutral { color: var(--status-neutral); }
 
 /* Tables */
 .table-container {
     width: 100%;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     overflow-x: auto;
     background-color: var(--bg-base);
 }
@@ -190,23 +217,18 @@ th {
     font-weight: 500;
     position: sticky;
     top: 0;
+    z-index: 10;
 }
 
 td {
     color: var(--text-primary);
 }
 
-.col-num {
-    text-align: right;
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-}
-
-/* Review Queue Cards */
+/* Cards (Review/Draft) */
 .review-card {
     background-color: var(--bg-surface);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 16px;
     display: flex;
     flex-direction: column;
@@ -214,7 +236,7 @@ td {
 }
 
 .review-card.has-warning {
-    border-left: 4px solid var(--status-warning);
+    border-left: 3px solid var(--status-warning);
 }
 
 .review-card-header {
@@ -235,15 +257,16 @@ td {
     font-weight: 500;
     color: var(--text-primary);
     margin-top: 4px;
+    font-family: var(--font-mono);
 }
 
 .qc-warning-text {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--status-warning);
     margin-top: 4px;
 }
 
-/* Inputs and Buttons */
+/* Form Controls */
 .input-group {
     display: flex;
     flex-direction: column;
@@ -265,7 +288,7 @@ input[type="text"], textarea {
     font-family: var(--font-ui);
     font-size: 13px;
     padding: 8px 12px;
-    transition: border-color 150ms ease;
+    transition: border-color 120ms ease;
 }
 
 input[type="text"]:focus, textarea:focus {
@@ -278,6 +301,7 @@ textarea {
     min-height: 80px;
 }
 
+/* Buttons */
 .button-group {
     display: flex;
     gap: 8px;
@@ -291,18 +315,16 @@ button {
     padding: 6px 12px;
     border-radius: 4px;
     cursor: pointer;
-    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+    transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
 button.primary {
     background-color: var(--accent);
     color: var(--bg-base);
-    border: 1px solid var(--accent);
+    border: none;
 }
-
 button.primary:hover {
     background-color: #5bb3e6;
-    border-color: #5bb3e6;
 }
 
 button.secondary {
@@ -310,9 +332,23 @@ button.secondary {
     color: var(--text-primary);
     border: 1px solid var(--border);
 }
-
 button.secondary:hover {
     background-color: var(--bg-hover);
+}
+
+button.destructive {
+    background-color: transparent;
+    color: var(--status-danger);
+    border: 1px solid transparent; /* or none depending on spec, spec says no border fill change except on hover */
+}
+button.destructive:hover {
+    background-color: var(--bg-hover);
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 /* Modals */
@@ -325,14 +361,17 @@ button.secondary:hover {
     justify-content: center;
     z-index: 1000;
 }
+.modal-backdrop.hidden {
+    display: none;
+}
 
 .modal-panel {
     background-color: var(--bg-surface);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 24px;
     width: 100%;
-    max-width: 400px;
+    max-width: 480px;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -365,8 +404,7 @@ button.secondary:hover {
     flex-direction: column;
     padding: 4px 0;
 }
-
-.dropdown-container:hover .dropdown-menu {
+.dropdown-container:hover .dropdown-menu, .dropdown-menu.show {
     display: flex;
 }
 
@@ -376,11 +414,34 @@ button.secondary:hover {
     color: var(--text-primary);
     display: flex;
     align-items: center;
-    gap: 8px;
     cursor: pointer;
-    transition: background-color 150ms ease;
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
 }
-
 .dropdown-item:hover {
     background-color: var(--bg-hover);
+}
+
+/* Toast */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 2000;
+}
+.toast {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 12px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
