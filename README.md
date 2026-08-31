@@ -106,6 +106,10 @@ python cli.py reject --email 2
 
 # 4. Send — preview first, then actually send.
 #    Respects your daily cap and adds random delays between sends.
+#
+#    TIP: Because outreach.db is a single, unversioned file holding all
+#    your contacts, drafts, and status history, it's recommended to copy 
+#    it somewhere safe before running a large batch send.
 python cli.py send --dry-run
 python cli.py send
 ```
