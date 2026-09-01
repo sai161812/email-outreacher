@@ -21,7 +21,7 @@ def run_send_batch():
     if not queue:
         return []
 
-    if count_sends_today() >= config.MAX_SENDS_PER_DAY:
+    if count_sends_today() >= config.DAILY_SEND_CAP:
         return [{"error": "Daily send limit reached"}]
 
     summary = []
@@ -31,11 +31,11 @@ def run_send_batch():
     server.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
 
     for item in queue:
-        if count_sends_today() >= config.MAX_SENDS_PER_DAY:
+        if count_sends_today() >= config.DAILY_SEND_CAP:
             summary.append({"id": item["id"], "status": "skipped", "reason": "daily limit"})
             break
             
-        if count_company_sends_this_week(item["company_id"]) >= config.MAX_COMPANY_SENDS_PER_WEEK:
+        if count_company_sends_this_week(item["company_id"]) >= config.MAX_PER_COMPANY_PER_WEEK:
             summary.append({"id": item["id"], "status": "skipped", "reason": "company weekly limit"})
             continue
             

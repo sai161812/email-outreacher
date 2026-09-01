@@ -257,6 +257,18 @@ class EmailRepository:
             ).fetchall()
             return variants, emails
             
+    @staticmethod
+    def get_all_tracked_emails():
+        with get_connection() as conn:
+            return conn.execute(
+                """SELECT e.*, c.name as company_name, ct.email as contact_email 
+                   FROM emails e 
+                   JOIN companies c ON e.company_id = c.id 
+                   JOIN contacts ct ON e.contact_id = ct.id 
+                   WHERE e.status NOT IN ('pending_review') 
+                   ORDER BY e.updated_at DESC"""
+            ).fetchall()
+
 class ProfileRepository:
     @staticmethod
     def get_profile():
