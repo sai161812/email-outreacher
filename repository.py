@@ -133,6 +133,14 @@ class EmailRepository:
             return cursor.lastrowid
 
     @staticmethod
+    def update_sent(email_id, msg_id, subject):
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ?, message_id = ?, subject = ? WHERE id = ?",
+                (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), msg_id, subject, email_id),
+            )
+            
+    @staticmethod
     def update_status(email_id, status, set_updated_at=False, set_sent_at=False, sent_at_time=None):
         query = "UPDATE emails SET status = ?"
         params = [status]
