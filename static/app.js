@@ -8,6 +8,29 @@ function showToast(message, isError = false) {
     setTimeout(() => { toast.remove(); }, 4000);
 }
 
+// Button loading wrapper
+async function withLoading(btn, asyncFn) {
+    if (btn.disabled) return;
+    const originalHtml = btn.innerHTML;
+    const originalWidth = btn.offsetWidth;
+    
+    btn.disabled = true;
+    if (originalWidth > 0) {
+        btn.style.minWidth = `${originalWidth}px`;
+    }
+    btn.innerHTML = `<span class="spinner"></span>` + btn.innerHTML;
+    
+    try {
+        await asyncFn();
+    } finally {
+        if (document.body.contains(btn)) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            btn.style.minWidth = '';
+        }
+    }
+}
+
 // Navigation
 document.querySelectorAll('#sidebar-nav .nav-item').forEach(nav => {
     nav.addEventListener('click', (e) => {
@@ -98,13 +121,13 @@ async function loadContacts() {
     });
     
     document.querySelectorAll('.btn-compose').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
+        btn.addEventListener('click', (e) => {
             const cid = e.target.dataset.cid;
             const ctid = e.target.dataset.ctid;
-            try {
+            withLoading(e.currentTarget, async () => {
                 await apiCall('/api/compose', 'POST', { company_id: parseInt(cid), contact_id: parseInt(ctid) });
                 showToast('Draft created successfully');
-            } catch (err) {}
+            });
         });
     });
 }
@@ -155,26 +178,33 @@ async function loadReviewQueue() {
     });
     
     // Bind actions
-    document.querySelectorAll('.btn-approve').forEach(b => b.addEventListener('click', async (e) => {
-        const id = e.target.dataset.id;
-        await apiCall(`/api/review/${id}`, 'POST', { action: 'approve' });
-        showToast('Draft approved');
-        loadReviewQueue();
+    document.querySelectorAll('.btn-approve').forEach(b => b.addEventListener('click', (e) => {
+        withLoading(e.currentTarget, async () => {
+            const id = e.currentTarget.dataset.id;
+            await apiCall(`/api/review/${id}`, 'POST', { action: 'approve' });
+            showToast('Draft approved');
+            loadReviewQueue();
+        });
     }));
-    document.querySelectorAll('.btn-reject').forEach(b => b.addEventListener('click', async (e) => {
-        const id = e.target.dataset.id;
-        await apiCall(`/api/review/${id}`, 'POST', { action: 'reject' });
-        showToast('Draft rejected', true);
-        loadReviewQueue();
+    document.querySelectorAll('.btn-reject').forEach(b => b.addEventListener('click', (e) => {
+        withLoading(e.currentTarget, async () => {
+            const id = e.currentTarget.dataset.id;
+            await apiCall(`/api/review/${id}`, 'POST', { action: 'reject' });
+            showToast('Draft rejected', true);
+            loadReviewQueue();
+        });
     }));
-    document.querySelectorAll('.btn-save').forEach(b => b.addEventListener('click', async (e) => {
-        const id = e.target.dataset.id;
-        const card = e.target.closest('.review-card');
-        const subject = card.querySelector('.inp-subject').value;
-        const hook = card.querySelector('.inp-hook').value;
-        const body = card.querySelector('.inp-body').value;
-        await apiCall(`/api/review/${id}`, 'POST', { action: 'edit', subject, hook, body });
-        showToast('Edits saved');
+    document.querySelectorAll('.btn-save').forEach(b => b.addEventListener('click', (e) => {
+        withLoading(e.currentTarget, async () => {
+            const btn = e.currentTarget;
+            const id = btn.dataset.id;
+            const card = btn.closest('.review-card');
+            const subject = card.querySelector('.inp-subject').value;
+            const hook = card.querySelector('.inp-hook').value;
+            const body = card.querySelector('.inp-body').value;
+            await apiCall(`/api/review/${id}`, 'POST', { action: 'edit', subject, hook, body });
+            showToast('Edits saved');
+        });
     }));
 }
 
@@ -195,13 +225,13 @@ async function loadTracking() {
         `;
     });
     
-    document.querySelectorAll('.btn-followup').forEach(b => b.addEventListener('click', async (e) => {
-        const id = e.target.dataset.id;
-        try {
+    document.querySelectorAll('.btn-followup').forEach(b => b.addEventListener('click', (e) => {
+        withLoading(e.currentTarget, async () => {
+            const id = e.currentTarget.dataset.id;
             await apiCall(`/api/tracking/${id}/followup`, 'POST', {});
             showToast('Follow-up drafted');
             loadTracking();
-        } catch(err){}
+        });
     }));
     
     const sentBody = document.querySelector('#table-tracking tbody');
@@ -235,30 +265,32 @@ async function loadTracking() {
         `;
     });
     
-    document.querySelectorAll('.btn-mark').forEach(b => b.addEventListener('click', async (e) => {
-        const id = e.currentTarget.dataset.id;
-        const st = e.currentTarget.dataset.st;
-        await apiCall(`/api/tracking/${id}/mark`, 'POST', { status: st });
-        showToast('Status updated');
-        loadTracking();
+    document.querySelectorAll('.btn-mark').forEach(b => b.addEventListener('click', (e) => {
+        withLoading(e.currentTarget, async () => {
+            const id = e.currentTarget.dataset.id;
+            const st = e.currentTarget.dataset.st;
+            await apiCall(`/api/tracking/${id}/mark`, 'POST', { status: st });
+            showToast('Status updated');
+            loadTracking();
+        });
     }));
 }
 
 // Global actions
-document.getElementById('btn-send-batch').addEventListener('click', async () => {
-    try {
+document.getElementById('btn-send-batch').addEventListener('click', (e) => {
+    withLoading(e.currentTarget, async () => {
         const res = await apiCall('/api/send', 'POST', {});
         showToast(`Batch run. Sent ${res.summary.length} emails.`);
         loadDashboard();
-    } catch(err) {}
+    });
 });
 
-document.getElementById('btn-check-replies').addEventListener('click', async () => {
-    try {
+document.getElementById('btn-check-replies').addEventListener('click', (e) => {
+    withLoading(e.currentTarget, async () => {
         const res = await apiCall('/api/check_replies', 'POST', {});
         showToast(`Checked IMAP. Found ${res.matches.length} replies.`);
         loadDashboard();
-    } catch(err) {}
+    });
 });
 
 // Modals
@@ -268,17 +300,17 @@ document.getElementById('btn-show-add-contact').addEventListener('click', () => 
 document.getElementById('btn-cancel-add-contact').addEventListener('click', () => {
     document.getElementById('modal-add-contact').classList.add('hidden');
 });
-document.getElementById('btn-save-contact').addEventListener('click', async () => {
-    const cid = document.getElementById('add-company-id').value;
-    const email = document.getElementById('add-email').value;
-    const name = document.getElementById('add-name').value;
-    
-    try {
+document.getElementById('btn-save-contact').addEventListener('click', (e) => {
+    withLoading(e.currentTarget, async () => {
+        const cid = document.getElementById('add-company-id').value;
+        const email = document.getElementById('add-email').value;
+        const name = document.getElementById('add-name').value;
+        
         await apiCall('/api/contacts', 'POST', { company_id: cid, email, name });
         showToast('Contact added');
         document.getElementById('modal-add-contact').classList.add('hidden');
         loadContacts();
-    } catch (err) {}
+    });
 });
 
 // Initial load
