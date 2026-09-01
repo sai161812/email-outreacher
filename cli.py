@@ -85,12 +85,11 @@ def cmd_compose(args):
                 print(f"Contact #{args.contact} already has a pending/sent email (#{e['id']}, status: {e['status']}) — use --force to draft another.")
                 return
 
-    candidate_context = Path(args.context).read_text() if args.context else ""
     company = contacts.get_company(args.company)
     variant = resume.pick_best_variant(company.get("job_text") or "")
     variant_id = variant["id"] if variant else None
 
-    eid = composer.compose_and_store(args.company, args.contact, candidate_context, variant_id)
+    eid = composer.compose_and_store(args.company, args.contact, variant_id)
     print(f"Drafted email #{eid} — run 'review' to check it before sending.")
 
 
@@ -152,7 +151,9 @@ def cmd_edit(args):
 
 
 def cmd_send(args):
-    sender.run_send_batch(dry_run=args.dry_run, force=args.force)
+    summary = sender.run_send_batch()
+    for s in summary:
+        print(f"[{s['status'].upper()}] {s['id']}" + (f" ({s.get('reason','')})" if s.get('reason') else ""))
 
 
 def cmd_status(args):
