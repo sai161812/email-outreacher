@@ -1,97 +1,47 @@
-"""
-You said you'll read replies yourself — this module just gives you a
-place to record what happened, and surfaces what's due for follow-up.
-"""
-from datetime import datetime, timedelta, date, timezone
+from datetime import datetime, timedelta, date
 import config
-from db import get_connection
-import suppression
-
+from repository import EmailRepository, SuppressionRepository
 
 def mark_replied(email_id):
     _set_status(email_id, "replied")
 
-
 def mark_ghosted(email_id):
     _set_status(email_id, "ghosted")
 
-
 def mark_bounced(email_id):
     _set_status(email_id, "bounced")
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT c.email FROM emails e JOIN contacts c ON e.contact_id = c.id WHERE e.id = ?",
-            (email_id,)
-        ).fetchone()
-        if row and row["email"]:
-            suppression.add(row["email"], "bounced")
-
+    email = EmailRepository.get_by_id(email_id)
+    if email:
+        from repository import ContactRepository
+        contact = ContactRepository.get_by_id(email["contact_id"])
+        if contact and contact["email"]:
+            SuppressionRepository.add(contact["email"], "bounced")
 
 def mark_interview_scheduled(email_id):
     _set_status(email_id, "interview_scheduled")
 
-
 def mark_interview_completed(email_id):
     _set_status(email_id, "interview_completed")
-
 
 def mark_offer(email_id):
     _set_status(email_id, "offer")
 
-
 def mark_no_offer(email_id):
     _set_status(email_id, "no_offer")
 
-
 def _set_status(email_id, status):
-    with get_connection() as conn:
-        conn.execute(
-            "UPDATE emails SET status = ?, updated_at = ? WHERE id = ?",
-            (status, datetime.now(timezone.utc).isoformat(), email_id),
-        )
-
+    EmailRepository.update_status(email_id, status, set_updated_at=True)
 
 def due_for_follow_up():
-    """
-    Sent emails with no reply after FOLLOW_UP_AFTER_DAYS, excluding ones
-    that already have a follow-up drafted or sent (so you don't get
-    prompted to follow up on the same email twice).
-    """
     cutoff = (date.today() - timedelta(days=config.FOLLOW_UP_AFTER_DAYS)).isoformat()
-    with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT e.*, c.name as company_name, ct.email as contact_email "
-            "FROM emails e "
-            "JOIN companies c ON e.company_id = c.id "
-            "JOIN contacts ct ON e.contact_id = ct.id "
-            "WHERE e.status = 'sent' AND date(e.sent_at) <= ? "
-            "AND e.id NOT IN (SELECT follow_up_to_email_id FROM emails "
-            "WHERE follow_up_to_email_id IS NOT NULL)",
-            (cutoff,),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
+    return [dict(r) for r in EmailRepository.get_due_for_follow_up(cutoff)]
 
 def pipeline_summary():
-    with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT status, COUNT(*) as n FROM emails GROUP BY status"
-        ).fetchall()
-        return {r["status"]: r["n"] for r in rows}
-
+    rows = EmailRepository.get_pipeline_summary()
+    return {r["status"]: r["n"] for r in rows}
 
 def stats():
-    with get_connection() as conn:
-        variant_rows = conn.execute("SELECT id, name FROM resume_variants ORDER BY id").fetchall()
-        emails = conn.execute(
-            """
-            SELECT e.id, e.status, e.sent_at, e.resume_variant_id, rv.name as variant_name
-            FROM emails e
-            LEFT JOIN resume_variants rv ON e.resume_variant_id = rv.id
-            WHERE e.status IN ('sent','replied','ghosted','bounced','interview_scheduled','interview_completed','offer','no_offer')
-               OR (e.sent_at IS NOT NULL AND e.status NOT IN ('pending_review', 'approved', 'rejected'))
-            """
-        ).fetchall()
+    variant_rows, emails = EmailRepository.get_stats_data()
 
     SENT_STATUSES = {'sent', 'replied', 'ghosted', 'bounced', 'interview_scheduled', 'interview_completed', 'offer', 'no_offer'}
     REPLY_STATUSES = {'replied', 'interview_scheduled', 'interview_completed', 'offer', 'no_offer'}

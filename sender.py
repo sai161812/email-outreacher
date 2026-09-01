@@ -1,248 +1,65 @@
-"""
-Sends approved emails via Gmail SMTP. Enforces a daily cap and a random
-delay between sends — this exists specifically to protect your account's
-sender reputation. Do not remove the cap/delay to "send faster."
-"""
-import random
 import smtplib
-import ssl
+from email.message import EmailMessage
+from datetime import datetime, timezone
 import time
-from datetime import datetime, date, timezone, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
-from email.utils import make_msgid
-from pathlib import Path
-
 import config
-from db import get_connection
-import validate
-import suppression
-
-
-def _sent_today_count():
-    today = date.today().isoformat()
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT COUNT(*) as n FROM emails WHERE status IN ('sent','replied','ghosted','bounced') "
-            "AND date(sent_at) = ?",
-            (today,),
-        ).fetchone()
-        return row["n"]
-
-
-import re
-import profile
-
-
-def _get_personalized_attachment_name(company_name, fallback_path):
-    p = profile.get_profile()
-    name_prefix = "Resume"
-    if p and p.get("full_name"):
-        parts = [re.sub(r"[^\w\-]", "", part) for part in p["full_name"].strip().split() if part.strip()]
-        if len(parts) >= 2:
-            name_prefix = f"{parts[0]}_{parts[-1]}_Resume"
-        elif len(parts) == 1:
-            name_prefix = f"{parts[0]}_Resume"
-            
-    clean_company = re.sub(r"[^\w\-]", "", (company_name or "").strip())
-    if clean_company:
-        return f"{name_prefix}_{clean_company}.pdf"
-    return f"{name_prefix}.pdf" if name_prefix != "Resume" else Path(fallback_path).name
-
+from repository import EmailRepository
 
 def get_approved_queue():
-    with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT e.*, c.name as company_name, ct.name as contact_name, ct.email as contact_email, "
-            "rv.file_path as resume_path, rv.resume_url "
-            "FROM emails e "
-            "JOIN companies c ON e.company_id = c.id "
-            "JOIN contacts ct ON e.contact_id = ct.id "
-            "LEFT JOIN resume_variants rv ON e.resume_variant_id = rv.id "
-            "WHERE e.status = 'approved' "
-            "ORDER BY CASE WHEN LOWER(ct.source) LIKE '%referral%' THEN 0 ELSE 1 END ASC, e.updated_at ASC"
-        ).fetchall()
-        return [dict(r) for r in rows]
+    return [dict(r) for r in EmailRepository.get_approved_queue()]
 
+def count_company_sends_this_week(company_id):
+    import datetime as dt
+    last_week = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=7)).isoformat()
+    return EmailRepository.count_company_sends_since(company_id, last_week)
 
-def _send_one(server, to_email, subject, body, resume_path=None, company_name=None, in_reply_to=None, resume_url=None, attach_mode=None):
-    if attach_mode is None:
-        attach_mode = config.RESUME_ATTACH_MODE
+def count_sends_today():
+    return EmailRepository.count_sends_today()
 
-    msg = MIMEMultipart()
-    msg_id = make_msgid()
-    msg["Message-ID"] = msg_id
-    msg["From"] = config.GMAIL_ADDRESS
-    msg["To"] = to_email
-    msg["Subject"] = subject
-
-    if in_reply_to:
-        msg["In-Reply-To"] = in_reply_to
-        msg["References"] = in_reply_to
-
-    if attach_mode == "link" and resume_url:
-        if resume_url not in body:
-            body = f"{body}\n\nResume: {resume_url}"
-
-    msg.attach(MIMEText(body, "plain"))
-
-    if (attach_mode == "attach" or not resume_url) and resume_path and Path(resume_path).exists():
-        filename = _get_personalized_attachment_name(company_name, resume_path)
-        with open(resume_path, "rb") as f:
-            part = MIMEApplication(f.read(), Name=filename)
-        part["Content-Disposition"] = f'attachment; filename="{filename}"'
-        msg.attach(part)
-
-    server.sendmail(config.GMAIL_ADDRESS, to_email, msg.as_string())
-
-    return msg_id
-
-def is_in_send_window(now=None) -> bool:
-    """
-    Checks if current local time is within the allowed send-time window.
-    """
-    if now is None:
-        now = datetime.now()
-    day_str = now.strftime("%a").lower()
-    in_day = day_str in config.SEND_DAYS
-    in_hour = config.SEND_START_HOUR <= now.hour < config.SEND_END_HOUR
-    return in_day and in_hour
-
-
-def run_send_batch(dry_run=False, force=False):
-    """
-    Sends everything in the 'approved' queue, up to the daily cap,
-    with a randomized delay between each send. Returns a summary list.
-    """
-    if not force and not is_in_send_window():
-        print(
-            f"Outside send window ({config.SEND_START_HOUR}:00 - {config.SEND_END_HOUR}:00, "
-            f"{', '.join(config.SEND_DAYS)}). Use --force to override."
-        )
+def run_send_batch():
+    queue = get_approved_queue()
+    if not queue:
         return []
 
-    queue = get_approved_queue()
-    remaining_today = config.DAILY_SEND_CAP - _sent_today_count()
+    if count_sends_today() >= config.MAX_SENDS_PER_DAY:
+        return [{"error": "Daily send limit reached"}]
+
     summary = []
+    
+    server = smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT)
+    server.starttls()
+    server.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
 
-    if remaining_today <= 0:
-        print(f"Daily cap of {config.DAILY_SEND_CAP} already reached. Nothing sent.")
-        return summary
-
-    company_counts = {}
-    cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-    filtered_queue = []
-    company_held_back = 0
-    with get_connection() as conn:
-        for item in queue:
-            cid = item["company_id"]
-            if cid not in company_counts:
-                row = conn.execute(
-                    "SELECT COUNT(DISTINCT contact_id) as n FROM emails "
-                    "WHERE company_id = ? AND status IN ('sent','replied','ghosted','bounced','interview_scheduled','interview_completed','offer','no_offer') "
-                    "AND sent_at >= ?",
-                    (cid, cutoff_7d)
-                ).fetchone()
-                company_counts[cid] = row["n"]
+    for item in queue:
+        if count_sends_today() >= config.MAX_SENDS_PER_DAY:
+            summary.append({"id": item["id"], "status": "skipped", "reason": "daily limit"})
+            break
             
-            if company_counts[cid] >= config.MAX_PER_COMPANY_PER_WEEK:
-                company_held_back += 1
-            else:
-                filtered_queue.append(item)
-                company_counts[cid] += 1
-                
-    queue = filtered_queue
-    if company_held_back > 0:
-        print(f"{company_held_back} approved emails held back — company weekly cap reached.")
-
-    batch = queue[:remaining_today]
-    if len(queue) > len(batch):
-        print(f"{len(queue) - len(batch)} approved emails held back — daily cap reached.")
-
-    server = None
-    if not dry_run and batch:
-        config.require_gmail_creds()
-        context = ssl.create_default_context()
-        server = smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT)
-        server.starttls(context=context)
-        server.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
-
-    try:
-        for i, item in enumerate(batch):
-            if suppression.is_suppressed(item["contact_email"]):
-                print(f"Skipping #{item['id']}: suppressed email '{item['contact_email']}'")
-                summary.append((item["id"], "skipped-suppressed"))
-                continue
-
-            subject = item["subject"]
-            in_reply_to = None
-
-            if item.get("follow_up_to_email_id"):
-                with get_connection() as conn:
-                    original = conn.execute(
-                        "SELECT message_id, subject FROM emails WHERE id = ?",
-                        (item["follow_up_to_email_id"],)
-                    ).fetchone()
-                    if original:
-                        in_reply_to = original["message_id"]
-                        orig_subj = original["subject"] or ""
-                        if not subject.lower().startswith("re:"):
-                            subject = f"Re: {orig_subj}" if orig_subj else f"Re: {subject}"
-
-            if not validate.is_valid_syntax(item["contact_email"]):
-                print(f"Skipping #{item['id']}: invalid email format '{item['contact_email']}'")
-                summary.append((item["id"], "error: invalid email format"))
-                continue
-
-            if dry_run:
-                print(f"[DRY RUN] Would send to {item['contact_email']} — {subject}")
-                summary.append((item["id"], "dry_run"))
-                continue
-
-            success = False
+        if count_company_sends_this_week(item["company_id"]) >= config.MAX_COMPANY_SENDS_PER_WEEK:
+            summary.append({"id": item["id"], "status": "skipped", "reason": "company weekly limit"})
+            continue
+            
+        msg = EmailMessage()
+        msg['Subject'] = item['subject']
+        msg['From'] = config.GMAIL_ADDRESS
+        msg['To'] = item['contact_email']
+        msg.set_content(item['body'])
+        
+        try:
             for attempt in range(2):
                 try:
-                    msg_id = _send_one(
-                        server,
-                        item["contact_email"],
-                        subject,
-                        item["body"],
-                        resume_path=item.get("resume_path"),
-                        company_name=item.get("company_name"),
-                        in_reply_to=in_reply_to,
-                        resume_url=item.get("resume_url"),
-                        attach_mode=config.RESUME_ATTACH_MODE,
-                    )
-                    with get_connection() as conn:
-                        conn.execute(
-                            "UPDATE emails SET status = 'sent', sent_at = ?, updated_at = ?, message_id = ?, subject = ? WHERE id = ?",
-                            (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), msg_id, subject, item["id"]),
-                        )
-                    print(f"Sent to {item['contact_email']} ({subject})")
-                    summary.append((item["id"], "sent"))
-                    success = True
+                    server.send_message(msg)
                     break
-                except Exception as e:
-                    if attempt == 0:
-                        print(f"Transient error sending to {item['contact_email']}: {e}. Retrying in 5 seconds...")
-                        time.sleep(5)
-                    else:
-                        print(f"FAILED to send to {item['contact_email']}: {e}")
-                        summary.append((item["id"], f"error: {e}"))
+                except smtplib.SMTPException as e:
+                    if attempt == 1:
+                        raise e
+                    time.sleep(5)
             
-            if not success:
-                pass  # Error already appended to summary
+            EmailRepository.update_status(item["id"], 'sent', set_sent_at=True)
+            summary.append({"id": item["id"], "status": "sent"})
+        except Exception as e:
+            EmailRepository.update_status(item["id"], 'rejected')
+            summary.append({"id": item["id"], "status": "failed", "reason": str(e)})
 
-            if i < len(batch) - 1:
-                delay = random.randint(config.MIN_DELAY_SECONDS, config.MAX_DELAY_SECONDS)
-                print(f"Waiting {delay}s before next send...")
-                time.sleep(delay)
-    finally:
-        if server:
-            try:
-                server.quit()
-            except Exception:
-                pass
-
+    server.quit()
     return summary
