@@ -1,0 +1,1502 @@
+[
+  {
+    "number": 1,
+    "title": "`requirements.txt` is invalid",
+    "severity": "P0",
+    "body": "`requirements.txt` contains embedded UTF-16-style null bytes in the Flask requirement. A clean `pip install -r requirements.txt` fails.\n\n**Fix:** replace the corrupted line with a normal UTF-8 requirement such as `flask>=3.0.0`, and preferably pin tested dependency versions."
+  },
+  {
+    "number": 2,
+    "title": "`resume.get_variant()` does not exist",
+    "severity": "P0",
+    "body": "`composer.py` calls `resume.get_variant(...)`, but `resume.py` has no such function. Compose/follow-up flows that specify a resume variant can fail with `AttributeError`.\n\n**Fix:** add a proper lookup function or use a repository `get_by_id()` method consistently."
+  },
+  {
+    "number": 3,
+    "title": "Editing a draft automatically approves it",
+    "severity": "P0",
+    "body": "`repository.py` updates content and also changes status to `approved`. This breaks the stated human-review guarantee.\n\n**Expected:** `Save Edits -> pending_review`, `Approve -> approved`."
+  },
+  {
+    "number": 4,
+    "title": "Web send endpoint bypasses the send window",
+    "severity": "P0",
+    "body": "`run_send_batch()` defaults to `force=True`, and the web endpoint calls it without overriding that value. The web UI can therefore send outside the configured send window.\n\n**Fix:** default to `force=False`; require an explicit, deliberate override."
+  },
+  {
+    "number": 5,
+    "title": "Daily/company send limits can be bypassed by changing status",
+    "severity": "P0",
+    "body": "Quota queries count only rows whose current status is `sent`. Once a message becomes `replied`, `ghosted`, `bounced`, `offer`, etc., it stops counting toward the quota.\n\n**Fix:** base quotas on historical send evidence such as `sent_at IS NOT NULL`, not the current status."
+  },
+  {
+    "number": 6,
+    "title": "SMTP success followed by DB failure can duplicate an email",
+    "severity": "P0",
+    "body": "If SMTP accepts a message but the subsequent DB update fails, retrying can send the same email again.\n\n**Fix:** introduce explicit send states, idempotency keys, and durable send-attempt records."
+  },
+  {
+    "number": 7,
+    "title": "Concurrent send requests can send the same email twice",
+    "severity": "P0",
+    "body": "Two requests can both read the same approved queue before either updates the row. UI button disabling is not concurrency control.\n\n**Fix:** atomically claim messages using a `sending` state or DB locking/claim pattern."
+  },
+  {
+    "number": 8,
+    "title": "`sendmail()` refusal results are ignored",
+    "severity": "P0",
+    "body": "`server.sendmail()` can return a dictionary of refused recipients. The code treats the call as successful without checking that result.\n\n**Fix:** inspect the return value and do not mark a refused message as sent."
+  },
+  {
+    "number": 9,
+    "title": "Research evidence is generated but discarded",
+    "severity": "P0",
+    "body": "AI research notes are produced but not persisted in the database or surfaced to the reviewer. The system loses the evidence behind personalization.\n\n**Fix:** store research facts, source URLs/titles, timestamps, and grounding metadata."
+  },
+  {
+    "number": 10,
+    "title": "No authentication/authorization",
+    "severity": "P0",
+    "body": "The application exposes contact data, drafts, approval, reply checks, and send actions without an authentication layer.\n\n**Fix:** add authentication, authorization, CSRF protection, and safe deployment defaults before remote/private-cloud exposure.\n\n---"
+  },
+  {
+    "number": 11,
+    "title": "Fresh installation may not initialize the DB with Flask CLI",
+    "severity": "P1",
+    "body": "DB initialization is inside `if __name__ == \"__main__\"`, while the README instructs using `flask run`. Under Flask CLI, that initialization block does not execute.\n\n**Fix:** initialize schema explicitly through startup/app factory or a CLI command."
+  },
+  {
+    "number": 12,
+    "title": "Test suite is broken and not isolated",
+    "severity": "P1",
+    "body": "The current test setup performs live HTTP requests, lacks proper assertions, and fails during collection if the server is not running.\n\n**Fix:** use Flask's test client, mocks, fixtures, and temporary databases."
+  },
+  {
+    "number": 13,
+    "title": "`test_context.py` modifies production data/files while being collected",
+    "severity": "P0",
+    "body": "The test writes to `context.txt` immediately on import and therefore changes application state merely by running tests.\n\n**Fix:** delete/rewrite it as a genuine test using a temporary fixture."
+  },
+  {
+    "number": 14,
+    "title": "Running tests can contaminate the AI candidate context",
+    "severity": "P0",
+    "body": "The test writes a Rust/OS persona into `context.txt`; this file is then used as candidate context for AI generation.\n\n**Fix:** never mutate production context from tests; isolate all test state."
+  },
+  {
+    "number": 15,
+    "title": "Bundled virtual environment is Windows-specific",
+    "severity": "P1",
+    "body": "The archive contains a Windows virtualenv whose interpreter paths are tied to the original machine.\n\n**Fix:** distribute source plus dependency/lock files, not `venv/`."
+  },
+  {
+    "number": 16,
+    "title": "`venv/` is unnecessarily included in the archive",
+    "severity": "P1",
+    "body": "The ZIP contains a ~73 MB environment artifact rather than a clean source distribution.\n\n**Fix:** ignore virtualenvs in source control/releases."
+  },
+  {
+    "number": 17,
+    "title": "`__pycache__`/`.pyc` artifacts are included",
+    "severity": "P2",
+    "body": "Python bytecode should not be included in the source release.\n\n**Fix:** remove them and add ignore rules."
+  },
+  {
+    "number": 18,
+    "title": "`.git/` is included in the ZIP",
+    "severity": "P1",
+    "body": "The archive contains repository history, configuration, reflogs, and metadata.\n\n**Fix:** exclude `.git/` from release archives."
+  },
+  {
+    "number": 19,
+    "title": "Git history retains old project data",
+    "severity": "P1",
+    "body": "Deleted/changed files can remain recoverable from `.git`, including historical `context.txt` content.\n\n**Fix:** keep Git history out of releases; if sensitive data was ever committed publicly, rotate/remove it properly."
+  },
+  {
+    "number": 20,
+    "title": "Release archive includes persistent DB artifacts",
+    "severity": "P1",
+    "body": "The ZIP contains SQLite databases with application/test data.\n\n**Fix:** generate databases on first run or ship sanitized seed data separately."
+  },
+  {
+    "number": 21,
+    "title": "Release archive includes the resume PDF",
+    "severity": "P1",
+    "body": "A personal resume should not be bundled in a distributable/public archive unless intentionally public.\n\n**Fix:** exclude it and make resume paths user-configurable."
+  },
+  {
+    "number": 22,
+    "title": "Release archive includes personal/test contact data",
+    "severity": "P1",
+    "body": "The database contains contacts, suppression records, and outreach history.\n\n**Fix:** release source separately from private runtime data."
+  },
+  {
+    "number": 23,
+    "title": "No actual credential was found in the repository scan, but packaging still exposes too much",
+    "severity": "P2",
+    "body": "No obvious API key/private key pattern was found, but `.git`, DBs, resume, and personal data are still inappropriate in a public release.\n\n**Fix:** implement a clean release pipeline and secret scan."
+  },
+  {
+    "number": 24,
+    "title": "Dependency versions are too loosely specified",
+    "severity": "P1",
+    "body": "Core dependencies use broad minimum versions, especially the rapidly changing Google GenAI SDK.\n\n**Fix:** pin known-good versions or use a lock file and test upgrade cadence."
+  },
+  {
+    "number": 25,
+    "title": "Configured Gemini model is hardcoded in code",
+    "severity": "P1",
+    "body": "The application appears to expose model configuration, but the actual model string is hardcoded.\n\n**Fix:** load it from validated configuration."
+  },
+  {
+    "number": 26,
+    "title": "`RESUME_DIR` configuration exists but is inconsistently used",
+    "severity": "P2",
+    "body": "The code defines a resume directory abstraction but often handles resume paths directly.\n\n**Fix:** centralize all filesystem resolution through `BASE_DIR`/`RESUME_DIR`."
+  },
+  {
+    "number": 27,
+    "title": "Relative `context.txt` path depends on current working directory",
+    "severity": "P1",
+    "body": "Using `open(\"context.txt\")` means behavior changes depending on where the app is launched from.\n\n**Fix:** resolve from `config.BASE_DIR`."
+  },
+  {
+    "number": 28,
+    "title": "Relative static path depends on current working directory",
+    "severity": "P2",
+    "body": "`send_from_directory('static', ...)` has the same working-directory fragility.\n\n**Fix:** use Flask's configured static/template directories."
+  },
+  {
+    "number": 29,
+    "title": "`debug=True` is unsafe outside development",
+    "severity": "P1",
+    "body": "Running the application directly can expose Flask's interactive debugger.\n\n**Fix:** make debug mode environment-controlled and default to false."
+  },
+  {
+    "number": 30,
+    "title": "Application startup config validation is incomplete",
+    "severity": "P1",
+    "body": "Invalid settings can be discovered only when a feature is used.\n\n**Fix:** validate all required settings and ranges once at startup.\n\n---"
+  },
+  {
+    "number": 31,
+    "title": "Missing `sent_at` semantics cause quota integrity problems",
+    "severity": "P1",
+    "body": "Current quota logic relies on mutable status rather than immutable send evidence.\n\n**Fix:** treat `sent_at` (or a send event) as historical fact."
+  },
+  {
+    "number": 32,
+    "title": "Timezone handling is inconsistent between quota and send window",
+    "severity": "P1",
+    "body": "Quota uses SQLite's UTC `date('now')`, while send-window logic uses local Python time.\n\n**Fix:** standardize on UTC storage and explicit application timezone conversion."
+  },
+  {
+    "number": 33,
+    "title": "Follow-up date comparisons have the same timezone mismatch",
+    "severity": "P1",
+    "body": "`date.today()` and DB timestamps can represent different calendar dates around midnight.\n\n**Fix:** define one timezone policy and apply it consistently."
+  },
+  {
+    "number": 34,
+    "title": "Send window only supports whole hours",
+    "severity": "P2",
+    "body": "You cannot express windows such as 09:30\u201317:45.\n\n**Fix:** store/send by minutes or timezone-aware datetime intervals if needed."
+  },
+  {
+    "number": 35,
+    "title": "`SEND_START_HOUR`/`SEND_END_HOUR` semantics are implicit",
+    "severity": "P3",
+    "body": "The implementation effectively uses a half-open interval (`start <= hour < end`) but does not document it.\n\n**Fix:** document boundary behavior."
+  },
+  {
+    "number": 36,
+    "title": "`SEND_DAYS` accepts arbitrary invalid values",
+    "severity": "P2",
+    "body": "Typos can silently disable sending or produce confusing behavior.\n\n**Fix:** validate against known weekday values."
+  },
+  {
+    "number": 37,
+    "title": "`MIN_DELAY_SECONDS > MAX_DELAY_SECONDS` is not validated",
+    "severity": "P1",
+    "body": "This can make `random.randint()` fail at runtime.\n\n**Fix:** validate min/max ordering at startup."
+  },
+  {
+    "number": 38,
+    "title": "Negative delay configuration is allowed",
+    "severity": "P2",
+    "body": "Negative values create nonsensical timing semantics.\n\n**Fix:** require non-negative durations."
+  },
+  {
+    "number": 39,
+    "title": "Negative daily/company caps are allowed",
+    "severity": "P2",
+    "body": "Negative caps create nonsensical queue behavior.\n\n**Fix:** require positive/non-negative values."
+  },
+  {
+    "number": 40,
+    "title": "Suppressed messages can consume batch slots",
+    "severity": "P1",
+    "body": "The queue is sliced to the quota before suppression filtering.\n\n**Fix:** filter non-sendable messages before applying send-slot selection."
+  },
+  {
+    "number": 41,
+    "title": "Suppressed messages can distort company quota selection",
+    "severity": "P1",
+    "body": "Company counts can be incremented before suppression exclusion.\n\n**Fix:** count only actually sendable candidates."
+  },
+  {
+    "number": 42,
+    "title": "Suppression should be normalized case-insensitively",
+    "severity": "P1",
+    "body": "`jane@acme.com` and `Jane@Acme.com` can be treated as different values.\n\n**Fix:** canonicalize emails to lowercase and trimmed form before all comparisons."
+  },
+  {
+    "number": 43,
+    "title": "`INSERT OR REPLACE` destroys suppression history timestamps",
+    "severity": "P2",
+    "body": "SQLite `REPLACE` can delete and recreate the row, resetting the original timestamp.\n\n**Fix:** use `ON CONFLICT DO UPDATE` without replacing the original creation time."
+  },
+  {
+    "number": 44,
+    "title": "Suppression has no reason taxonomy",
+    "severity": "P2",
+    "body": "Reasons are arbitrary strings.\n\n**Fix:** standardize reasons such as unsubscribe, bounce, manual, invalid, recruiter request, etc."
+  },
+  {
+    "number": 45,
+    "title": "Suppression has no audit/history model",
+    "severity": "P2",
+    "body": "You cannot tell who/what added or removed a suppression and why it changed.\n\n**Fix:** record suppression events or immutable history."
+  },
+  {
+    "number": 46,
+    "title": "SMTP connection lacks explicit timeout",
+    "severity": "P1",
+    "body": "Connection attempts can hang, especially inside a synchronous HTTP request.\n\n**Fix:** specify explicit network timeouts."
+  },
+  {
+    "number": 47,
+    "title": "SMTP session is not recreated after a mid-batch connection failure",
+    "severity": "P1",
+    "body": "One dead SMTP session can cause all later messages to fail.\n\n**Fix:** reconnect/re-authenticate when appropriate."
+  },
+  {
+    "number": 48,
+    "title": "Retry logic treats all errors alike",
+    "severity": "P1",
+    "body": "Permanent errors are retried unnecessarily, while transient errors need targeted retry policy.\n\n**Fix:** classify retryable vs non-retryable errors."
+  },
+  {
+    "number": 49,
+    "title": "Retry uses fixed delay instead of exponential backoff/jitter",
+    "severity": "P2",
+    "body": "A fixed sleep is crude for provider throttling/transient outages.\n\n**Fix:** use bounded exponential backoff with jitter."
+  },
+  {
+    "number": 50,
+    "title": "AI retry block does not include the actual API call",
+    "severity": "P1",
+    "body": "The Gemini request occurs outside the `try` block. Network/rate-limit errors therefore are not retried.\n\n**Fix:** wrap the API invocation and parsing in a proper retry policy."
+  },
+  {
+    "number": 51,
+    "title": "SMTP failures are recorded as human `rejected`",
+    "severity": "P1",
+    "body": "Transport failure is conceptually different from a user rejecting a draft.\n\n**Fix:** introduce states such as `send_failed`, `retry_pending`, or equivalent."
+  },
+  {
+    "number": 52,
+    "title": "No durable send-attempt log",
+    "severity": "P1",
+    "body": "There is no first-class record of attempts, timestamps, SMTP responses, retries, and failures.\n\n**Fix:** create a `send_attempts` table."
+  },
+  {
+    "number": 53,
+    "title": "No send idempotency key",
+    "severity": "P0",
+    "body": "There is no durable identifier preventing duplicate delivery after retries or concurrency races.\n\n**Fix:** create deterministic/unique send attempt IDs and claim semantics."
+  },
+  {
+    "number": 54,
+    "title": "Sending is performed synchronously inside an HTTP request",
+    "severity": "P1",
+    "body": "The request can remain open for many minutes because of deliberate random delays.\n\n**Fix:** background worker/job queue."
+  },
+  {
+    "number": 55,
+    "title": "Worst-case batch duration can approach an hour or more",
+    "severity": "P1",
+    "body": "A 15-email batch with 45\u2013240 second delays can take ~56 minutes before retries and connection time.\n\n**Fix:** move sending outside request/response lifecycle."
+  },
+  {
+    "number": 56,
+    "title": "No send job progress tracking",
+    "severity": "P2",
+    "body": "The UI has no persistent concept of a running batch, current item, failures, or completion state.\n\n**Fix:** create a `send_jobs`/job-progress model."
+  },
+  {
+    "number": 57,
+    "title": "Send button has no confirmation step",
+    "severity": "P1",
+    "body": "Sending is irreversible, yet the UI can trigger it directly.\n\n**Fix:** show a pre-send confirmation with count, cap, window, and risk summary."
+  },
+  {
+    "number": 58,
+    "title": "UI does not show quota before send",
+    "severity": "P2",
+    "body": "The operator cannot see daily/company limits or how many slots remain.\n\n**Fix:** expose quota state in the confirmation UI."
+  },
+  {
+    "number": 59,
+    "title": "Batch result count is wrong in the UI",
+    "severity": "P2",
+    "body": "`summary.length` is presented as the number sent even though summary entries can be skipped/failed/dry-run.\n\n**Fix:** count records with actual success status."
+  },
+  {
+    "number": 60,
+    "title": "SMTP is opened before all suppression filtering is complete",
+    "severity": "P2",
+    "body": "The app may authenticate to Gmail even when there are no sendable messages.\n\n**Fix:** fully prefilter the queue before opening SMTP.\n\n---"
+  },
+  {
+    "number": 61,
+    "title": "No explicit email state machine",
+    "severity": "P1",
+    "body": "Any arbitrary status can be written; transitions are not centrally validated.\n\n**Fix:** define allowed transitions and enforce them in service/repository code and preferably DB constraints."
+  },
+  {
+    "number": 62,
+    "title": "Unsupported status actions can return success",
+    "severity": "P1",
+    "body": "An invalid status value such as `banana` can return success without changing anything.\n\n**Fix:** reject unknown actions with a 4xx response."
+  },
+  {
+    "number": 63,
+    "title": "Updating a nonexistent email can return success",
+    "severity": "P1",
+    "body": "Update queries do not consistently inspect affected-row counts.\n\n**Fix:** return 404 when the target row does not exist."
+  },
+  {
+    "number": 64,
+    "title": "Status updates can mutate impossible states",
+    "severity": "P1",
+    "body": "Nothing prevents transitions such as `approved -> replied` when never sent, or `replied -> approved`.\n\n**Fix:** enforce state transition rules."
+  },
+  {
+    "number": 65,
+    "title": "Historical status is lost",
+    "severity": "P1",
+    "body": "The current status overwrites the previous lifecycle state.\n\n**Fix:** add an immutable `status_events`/`outreach_events` table."
+  },
+  {
+    "number": 66,
+    "title": "Email status and transport state are overloaded into one field",
+    "severity": "P1",
+    "body": "Human review, sending, delivery, conversation, and hiring outcomes are all mixed together.\n\n**Fix:** separate workflow state from delivery/conversation events."
+  },
+  {
+    "number": 67,
+    "title": "`rejected` is overloaded",
+    "severity": "P1",
+    "body": "A human rejecting a draft and a transport failure are represented using the same concept.\n\n**Fix:** separate `rejected`, `send_failed`, `cancelled`, `suppressed`, etc."
+  },
+  {
+    "number": 68,
+    "title": "Schema status documentation is stale",
+    "severity": "P2",
+    "body": "Schema comments omit statuses that the UI actually uses, such as interview/offer outcomes.\n\n**Fix:** centralize and document allowed state values."
+  },
+  {
+    "number": 69,
+    "title": "`updated_at` is not reliably updated on content edit",
+    "severity": "P2",
+    "body": "Content mutations can retain an old timestamp.\n\n**Fix:** update `updated_at` on every mutation."
+  },
+  {
+    "number": 70,
+    "title": "`update_sent()` does not reliably verify row existence",
+    "severity": "P2",
+    "body": "A failed update can look like a successful operation.\n\n**Fix:** check `rowcount`."
+  },
+  {
+    "number": 71,
+    "title": "No recipient/company consistency constraint",
+    "severity": "P0",
+    "body": "An email can be composed with a company ID unrelated to the contact's actual company.\n\n**Fix:** validate the relationship server-side before composition."
+  },
+  {
+    "number": 72,
+    "title": "Historical email does not snapshot recipient data",
+    "severity": "P2",
+    "body": "If contact/company information changes later, historical emails can display current relational data rather than what was actually sent.\n\n**Fix:** snapshot `to_email`, recipient name, company name, etc. on the email record."
+  },
+  {
+    "number": 73,
+    "title": "`follow_up_to_email_id` needs stronger semantics",
+    "severity": "P1",
+    "body": "It currently functions as an existence check rather than a workflow relation with explicit active/sent/rejected semantics.\n\n**Fix:** treat follow-ups as first-class outreach records/events."
+  },
+  {
+    "number": 74,
+    "title": "Follow-up queries block future follow-ups after any child exists",
+    "severity": "P1",
+    "body": "A rejected historical follow-up still makes the original look already followed-up.\n\n**Fix:** exclude only active/sent follow-ups, not every child row."
+  },
+  {
+    "number": 75,
+    "title": "Follow-up endpoint does not enforce due date",
+    "severity": "P1",
+    "body": "The backend can generate a follow-up even when the UI would normally not show the message as due.\n\n**Fix:** enforce business rules on the server."
+  },
+  {
+    "number": 76,
+    "title": "Follow-up is allowed for `replied`",
+    "severity": "P2",
+    "body": "A contact who already replied is usually in a conversation, not a \u201cno response\u201d follow-up state.\n\n**Fix:** define separate conversation handling or narrow eligible statuses."
+  },
+  {
+    "number": 77,
+    "title": "`follow_up_due` is effectively dead schema",
+    "severity": "P3",
+    "body": "The field exists but due dates are dynamically calculated instead.\n\n**Fix:** either remove it or make it authoritative."
+  },
+  {
+    "number": 78,
+    "title": "Company/contact relationship is not enforced at DB level",
+    "severity": "P2",
+    "body": "Foreign keys alone do not ensure that a contact belongs to the company referenced by an email.\n\n**Fix:** enforce relationship at service layer and structure data around consistent foreign keys."
+  },
+  {
+    "number": 79,
+    "title": "No DB CHECK constraint for valid statuses",
+    "severity": "P2",
+    "body": "SQLite can accept arbitrary status strings.\n\n**Fix:** add a CHECK constraint or dedicated lookup table where appropriate."
+  },
+  {
+    "number": 80,
+    "title": "No unique outbound message ID constraint/index",
+    "severity": "P1",
+    "body": "`message_id` is important for reply matching and should be indexed/unique when present.\n\n**Fix:** add a unique index/constraint and validate provider IDs.\n\n---"
+  },
+  {
+    "number": 81,
+    "title": "Duplicate contacts already exist",
+    "severity": "P1",
+    "body": "The database contains duplicate addresses for the same company/contact context.\n\n**Fix:** normalize emails and enforce uniqueness."
+  },
+  {
+    "number": 82,
+    "title": "`add_contact()` does not use duplicate-detection logic",
+    "severity": "P1",
+    "body": "A lookup helper exists, but insertion does not consistently use it.\n\n**Fix:** enforce dedupe centrally and in the DB."
+  },
+  {
+    "number": 83,
+    "title": "Email uniqueness is not enforced by the DB",
+    "severity": "P1",
+    "body": "Without a uniqueness constraint, race conditions can still create duplicate contacts.\n\n**Fix:** unique index on `(company_id, normalized_email)` or equivalent model."
+  },
+  {
+    "number": 84,
+    "title": "Email normalization is inconsistent",
+    "severity": "P1",
+    "body": "Whitespace/casing are not consistently canonicalized on ingestion and comparison.\n\n**Fix:** normalize once at the boundary."
+  },
+  {
+    "number": 85,
+    "title": "Suppression lookup is vulnerable to case mismatch",
+    "severity": "P1",
+    "body": "Case differences can bypass a suppression record.\n\n**Fix:** canonical email storage."
+  },
+  {
+    "number": 86,
+    "title": "Email ingestion only performs syntax validation",
+    "severity": "P2",
+    "body": "A richer MX validator exists but is not consistently used by contact/CSV ingestion.\n\n**Fix:** apply a clear validation policy at ingestion."
+  },
+  {
+    "number": 87,
+    "title": "`has_mx_record()` conflates DNS failure with no mail server",
+    "severity": "P2",
+    "body": "`NoNameservers` is handled as a definitive failure rather than \u201ccould not verify.\u201d\n\n**Fix:** distinguish `valid`, `invalid`, and `unknown` DNS outcomes."
+  },
+  {
+    "number": 88,
+    "title": "No-MX does not necessarily mean undeliverable",
+    "severity": "P2",
+    "body": "Mail delivery can fall back to A/AAAA in some cases; lack of MX is not identical to impossible delivery.\n\n**Fix:** treat the validator as advisory and model uncertainty explicitly."
+  },
+  {
+    "number": 89,
+    "title": "CSV company matching can merge unrelated companies with the same domain",
+    "severity": "P1",
+    "body": "Domain-first matching can return the wrong company before checking name identity.\n\n**Fix:** normalize and match using a deliberate hierarchy."
+  },
+  {
+    "number": 90,
+    "title": "CSV importer can create multiple companies for equivalent names/domains",
+    "severity": "P1",
+    "body": "Company normalization is too weak to guarantee canonical identity.\n\n**Fix:** use canonical company/domain keys and DB uniqueness where appropriate."
+  },
+  {
+    "number": 91,
+    "title": "CSV importer only supports one job posting per company naturally",
+    "severity": "P1",
+    "body": "Job data lives directly on the company, so importing multiple roles for one company overwrites/complicates the model.\n\n**Fix:** introduce `job_postings` as a first-class entity."
+  },
+  {
+    "number": 92,
+    "title": "CSV template comment row is treated as data",
+    "severity": "P2",
+    "body": "The example comment can produce an avoidable validation error.\n\n**Fix:** remove it or support comment rows explicitly."
+  },
+  {
+    "number": 93,
+    "title": "CSV importer creates duplicate contacts",
+    "severity": "P1",
+    "body": "Repeated rows are inserted without robust canonical dedupe.\n\n**Fix:** dedupe in service + DB."
+  },
+  {
+    "number": 94,
+    "title": "CSV upload path can collide on identical filenames",
+    "severity": "P2",
+    "body": "Using a predictable temp path based on the uploaded filename can create races.\n\n**Fix:** use a unique temporary file path."
+  },
+  {
+    "number": 95,
+    "title": "CSV upload has no size limit",
+    "severity": "P2",
+    "body": "There is no obvious `MAX_CONTENT_LENGTH` safeguard.\n\n**Fix:** cap upload size."
+  },
+  {
+    "number": 96,
+    "title": "CSV parser silently accepts unknown columns",
+    "severity": "P3",
+    "body": "Unexpected fields are not clearly reported.\n\n**Fix:** validate headers and report extras/missing columns."
+  },
+  {
+    "number": 97,
+    "title": "CSV encoding support is narrow",
+    "severity": "P2",
+    "body": "Only UTF-8 with BOM is assumed. Windows-generated CSVs can use other encodings.\n\n**Fix:** detect/fallback gracefully or normalize input requirements."
+  },
+  {
+    "number": 98,
+    "title": "Empty/malformed CSVs are not handled robustly",
+    "severity": "P2",
+    "body": "Missing headers or empty files can lead to awkward downstream behavior.\n\n**Fix:** explicitly validate `fieldnames` and row structure."
+  },
+  {
+    "number": 99,
+    "title": "CSV import is not preview-first",
+    "severity": "P2",
+    "body": "Uploading immediately mutates the production DB.\n\n**Fix:** implement upload -> validate/preview -> confirm -> import."
+  },
+  {
+    "number": 100,
+    "title": "CSV import is not clearly transactional",
+    "severity": "P2",
+    "body": "Partial failure can leave partial imports without an explicit policy.\n\n**Fix:** support all-or-nothing mode or clearly report partial results."
+  },
+  {
+    "number": 101,
+    "title": "CSV error tuples are not a clean API structure",
+    "severity": "P3",
+    "body": "Errors are accumulated as tuples that become arrays over JSON serialization.\n\n**Fix:** return structured objects such as `{row, error}`."
+  },
+  {
+    "number": 102,
+    "title": "Company add endpoint lacks strong validation",
+    "severity": "P2",
+    "body": "Blank/invalid names, domains, and URLs can enter the database.\n\n**Fix:** validate and normalize at the API boundary."
+  },
+  {
+    "number": 103,
+    "title": "Company domain normalization is incomplete",
+    "severity": "P2",
+    "body": "Equivalent representations (`https://`, `www.`, case, trailing dot, etc.) are not consistently canonicalized.\n\n**Fix:** canonicalize domains before lookup/storage."
+  },
+  {
+    "number": 104,
+    "title": "`normalize_company_name()` is too minimal for identity",
+    "severity": "P3",
+    "body": "It handles whitespace/trailing periods but not broader legal suffix/punctuation variants.\n\n**Fix:** improve normalization only if company dedupe requires it."
+  },
+  {
+    "number": 105,
+    "title": "Dead `pass` logic in `find_company_by_name()`",
+    "severity": "P3",
+    "body": "The function contains a no-op branch that indicates incomplete logic.\n\n**Fix:** remove dead code and simplify matching flow."
+  },
+  {
+    "number": 106,
+    "title": "Dead/inconsistent `find_contact_without_email()` logic",
+    "severity": "P3",
+    "body": "The schema requires an email, conflicting with logic intended to find contacts without one.\n\n**Fix:** remove the obsolete path or redesign the schema intentionally."
+  },
+  {
+    "number": 107,
+    "title": "No contact/company edit UI",
+    "severity": "P2",
+    "body": "The application can add data but has weak management tools for correcting it.\n\n**Fix:** provide edit/merge/archive actions."
+  },
+  {
+    "number": 108,
+    "title": "No contact/company delete/archive strategy",
+    "severity": "P2",
+    "body": "There is no clear lifecycle for stale/incorrect records.\n\n**Fix:** define soft-delete/archive semantics that preserve historical outreach."
+  },
+  {
+    "number": 109,
+    "title": "No contact merge tool",
+    "severity": "P2",
+    "body": "Duplicates can accumulate without an operational way to merge them safely.\n\n**Fix:** add duplicate detection and merge workflow."
+  },
+  {
+    "number": 110,
+    "title": "No data-cleanup workflow",
+    "severity": "P3",
+    "body": "Test records and stale contacts can remain indefinitely.\n\n**Fix:** build safe cleanup/archiving capabilities.\n\n---"
+  },
+  {
+    "number": 111,
+    "title": "Automatic resume selection is disconnected from the web flow",
+    "severity": "P1",
+    "body": "Current web composition does not send `resume_variant_id`, so the existing resume-selection logic is not actually used in the normal UI flow.\n\n**Fix:** wire automatic selection into the compose service and persist the chosen variant."
+  },
+  {
+    "number": 112,
+    "title": "Resume management is inaccessible from the web UI",
+    "severity": "P2",
+    "body": "The backend has resume-variant functions, but users cannot conveniently add/manage/select variants in the UI.\n\n**Fix:** add a Resume Management screen."
+  },
+  {
+    "number": 113,
+    "title": "Resume variant lookup is inefficient",
+    "severity": "P2",
+    "body": "Sender code appears to load all variants and scan them instead of fetching a single ID.\n\n**Fix:** query by primary key."
+  },
+  {
+    "number": 114,
+    "title": "`ResumeRepository.get_by_id()` is missing",
+    "severity": "P2",
+    "body": "This omission helped cause the missing `resume.get_variant()` bug.\n\n**Fix:** add a canonical repository method."
+  },
+  {
+    "number": 115,
+    "title": "Resume keyword matching uses naive substring matching",
+    "severity": "P2",
+    "body": "Short tokens can match unrelated substrings (`sql` in `nosql`, etc.).\n\n**Fix:** token-aware matching or phrase/word-boundary scoring."
+  },
+  {
+    "number": 116,
+    "title": "Resume keyword scores are too simplistic",
+    "severity": "P2",
+    "body": "All matched keywords effectively have similar importance.\n\n**Fix:** weight required skills, titles, exact phrases, and stronger role signals."
+  },
+  {
+    "number": 117,
+    "title": "Resume ties are resolved arbitrarily",
+    "severity": "P3",
+    "body": "Equal scores fall back to insertion order.\n\n**Fix:** define deterministic secondary ranking or manual preference."
+  },
+  {
+    "number": 118,
+    "title": "Relative resume paths depend on working directory",
+    "severity": "P1",
+    "body": "`Path(resume_path).exists()` can fail depending on launch directory.\n\n**Fix:** resolve against `BASE_DIR`/`RESUME_DIR`."
+  },
+  {
+    "number": 119,
+    "title": "Missing resume files can silently result in no attachment",
+    "severity": "P1",
+    "body": "A required resume can disappear from the outgoing message without stopping the send.\n\n**Fix:** fail safely or require an explicit link-only policy."
+  },
+  {
+    "number": 120,
+    "title": "`RESUME_ATTACH_MODE` accepts invalid values silently",
+    "severity": "P2",
+    "body": "Unexpected configuration can produce ambiguous behavior.\n\n**Fix:** validate enum-like config values."
+  },
+  {
+    "number": 121,
+    "title": "Link mode can silently fall back to attachment mode",
+    "severity": "P2",
+    "body": "`attach` becomes effectively the fallback if no URL is present.\n\n**Fix:** fail configuration or make fallback behavior explicit."
+  },
+  {
+    "number": 122,
+    "title": "Resume files are not validated as actual PDFs",
+    "severity": "P2",
+    "body": "A `.pdf` path is not enough to guarantee the content is a valid PDF.\n\n**Fix:** validate file type/signature when adding/updating resumes."
+  },
+  {
+    "number": 123,
+    "title": "Resume lifecycle is incomplete",
+    "severity": "P2",
+    "body": "No strong edit/replace/delete/deactivate semantics are exposed.\n\n**Fix:** support full variant lifecycle management."
+  },
+  {
+    "number": 124,
+    "title": "Profile setup is not exposed in the web workflow",
+    "severity": "P1",
+    "body": "Profile data exists, but onboarding/configuration is largely dependent on manual backend setup.\n\n**Fix:** add a profile/settings page."
+  },
+  {
+    "number": 125,
+    "title": "Candidate context is a single unstructured global text blob",
+    "severity": "P1",
+    "body": "Free-form `context.txt` allows accidental or unsupported claims.\n\n**Fix:** model candidate facts structurally."
+  },
+  {
+    "number": 126,
+    "title": "Candidate context is not strongly validated",
+    "severity": "P1",
+    "body": "There is no robust validator ensuring generated candidate claims exist in approved profile/project data.\n\n**Fix:** implement deterministic candidate-claim validation."
+  },
+  {
+    "number": 127,
+    "title": "Candidate context path is not isolated per environment",
+    "severity": "P2",
+    "body": "A shared file can be overwritten or contaminated by tests, demos, or multiple users.\n\n**Fix:** store context in controlled persistent configuration/profile storage."
+  },
+  {
+    "number": 128,
+    "title": "Profile singleton is database-driven but not clearly surfaced",
+    "severity": "P3",
+    "body": "The schema enforces a single profile (`id = 1`) but the design assumption is not well documented.\n\n**Fix:** document the single-user model or generalize if multi-user support is planned."
+  },
+  {
+    "number": 129,
+    "title": "Profile fields are underused",
+    "severity": "P3",
+    "body": "Stored phone/email fields are not consistently reflected in signature/generation.\n\n**Fix:** either use them intentionally or simplify the schema."
+  },
+  {
+    "number": 130,
+    "title": "Resume is mapped conceptually to company rather than a specific job",
+    "severity": "P1",
+    "body": "A candidate should choose a resume based on role/job requirements, not merely company identity.\n\n**Fix:** tie resume selection to a `job_posting`/campaign.\n\n---"
+  },
+  {
+    "number": 131,
+    "title": "External job/company content is not clearly treated as untrusted input",
+    "severity": "P1",
+    "body": "Job postings and web content can contain prompt-injection text.\n\n**Fix:** explicitly delimit external data as untrusted evidence and instruct the model never to follow instructions contained inside it."
+  },
+  {
+    "number": 132,
+    "title": "Research sources are not persisted as structured provenance",
+    "severity": "P1",
+    "body": "You lose URLs, source identity, and reasoning trace behind generated claims.\n\n**Fix:** store source metadata alongside research facts."
+  },
+  {
+    "number": 133,
+    "title": "No claim-to-source mapping",
+    "severity": "P2",
+    "body": "A sentence in the final email cannot be traced to the exact research fact/source that supports it.\n\n**Fix:** store evidence IDs and build claim validation."
+  },
+  {
+    "number": 134,
+    "title": "Research notes have no schema",
+    "severity": "P2",
+    "body": "Free-form notes cannot be reliably validated or rendered.\n\n**Fix:** structured fields for fact, source, date, relevance, confidence."
+  },
+  {
+    "number": 135,
+    "title": "AI model/version metadata is not stored per generation",
+    "severity": "P2",
+    "body": "Historical emails do not reliably record which model generated them.\n\n**Fix:** persist model name and generation metadata."
+  },
+  {
+    "number": 136,
+    "title": "Prompt versioning is missing",
+    "severity": "P2",
+    "body": "When prompts change, historical emails cannot be tied to the prompt version that produced them.\n\n**Fix:** store a prompt-template/version identifier."
+  },
+  {
+    "number": 137,
+    "title": "No token/cost tracking",
+    "severity": "P3",
+    "body": "AI usage/cost cannot be analyzed per email/campaign.\n\n**Fix:** record token usage/cost when available."
+  },
+  {
+    "number": 138,
+    "title": "Retry logic does not cover Gemini network/rate-limit failures",
+    "severity": "P1",
+    "body": "As noted above, only downstream parsing is inside the retry block.\n\n**Fix:** retry actual transient API calls."
+  },
+  {
+    "number": 139,
+    "title": "Retry policy does not distinguish permanent vs transient AI failures",
+    "severity": "P1",
+    "body": "Invalid requests/auth errors should not be blindly retried.\n\n**Fix:** classify API error types."
+  },
+  {
+    "number": 140,
+    "title": "QC rules do not exactly match prompt rules",
+    "severity": "P2",
+    "body": "For example, the prompt says \u201cunder 6 words\u201d while code permits `<= 6`.\n\n**Fix:** make generation requirements and QC constraints identical."
+  },
+  {
+    "number": 141,
+    "title": "QC counts greeting/signature against the model's body word limit",
+    "severity": "P2",
+    "body": "The model's requested pitch length differs from the final assembled email length.\n\n**Fix:** QC the intended sections separately."
+  },
+  {
+    "number": 142,
+    "title": "Placeholder detection is incomplete",
+    "severity": "P1",
+    "body": "Only a narrow set of bracket-style placeholders are caught.\n\n**Fix:** detect broader placeholder patterns and model refusal/fallback behavior."
+  },
+  {
+    "number": 143,
+    "title": "QC does not verify factual claims against research",
+    "severity": "P1",
+    "body": "The system can flag superficial style problems but not unsupported personalization claims.\n\n**Fix:** deterministic/evidence-backed claim validation."
+  },
+  {
+    "number": 144,
+    "title": "QC does not verify candidate claims against structured candidate data",
+    "severity": "P1",
+    "body": "It is possible for an AI output to invent or distort candidate background.\n\n**Fix:** compare extracted claims against approved candidate facts."
+  },
+  {
+    "number": 145,
+    "title": "QC does not validate recipient/company consistency",
+    "severity": "P1",
+    "body": "The generated email can reference the wrong company/person context without a deterministic check.\n\n**Fix:** validate entities after generation."
+  },
+  {
+    "number": 146,
+    "title": "QC does not validate URLs",
+    "severity": "P2",
+    "body": "Signature/project links can be malformed or unusable.\n\n**Fix:** validate URL syntax and optionally resolve/check them."
+  },
+  {
+    "number": 147,
+    "title": "QC does not validate signature structure",
+    "severity": "P2",
+    "body": "Name/links can be missing, duplicated, or malformed.\n\n**Fix:** explicit signature schema/checks."
+  },
+  {
+    "number": 148,
+    "title": "QC does not detect repetitive/spam-like language",
+    "severity": "P2",
+    "body": "There is no similarity check across generated emails.\n\n**Fix:** add phrase duplication/similarity detection."
+  },
+  {
+    "number": 149,
+    "title": "QC does not check subject/body coherence",
+    "severity": "P2",
+    "body": "A technically valid subject can be unrelated to the message body.\n\n**Fix:** lightweight semantic consistency checks."
+  },
+  {
+    "number": 150,
+    "title": "QC is too shallow to justify its name",
+    "severity": "P2",
+    "body": "The current system is mainly a set of heuristics, not a robust quality-control pipeline.\n\n**Fix:** expand QC around evidence, entities, claims, structure, and consistency."
+  },
+  {
+    "number": 151,
+    "title": "Candidate context has no field-level provenance",
+    "severity": "P2",
+    "body": "You cannot tell whether a candidate fact came from a resume, portfolio, user input, or another source.\n\n**Fix:** store fact source and verification state."
+  },
+  {
+    "number": 152,
+    "title": "No confidence score for research claims",
+    "severity": "P2",
+    "body": "Reviewers get no indication of evidence strength.\n\n**Fix:** attach confidence/relevance metadata."
+  },
+  {
+    "number": 153,
+    "title": "Research evidence is not visible during review",
+    "severity": "P1",
+    "body": "The reviewer cannot easily verify what motivated a personalized hook.\n\n**Fix:** add evidence/source panel in Review."
+  },
+  {
+    "number": 154,
+    "title": "No \u201cwhy this resume\u201d explanation",
+    "severity": "P2",
+    "body": "Even if resume ranking works, the user cannot inspect why a particular variant was selected.\n\n**Fix:** show matched role skills and scoring rationale."
+  },
+  {
+    "number": 155,
+    "title": "No AI generation timeout strategy",
+    "severity": "P1",
+    "body": "Long or stalled provider calls can block application workflows.\n\n**Fix:** configure client timeouts and bounded retries."
+  },
+  {
+    "number": 156,
+    "title": "No model fallback strategy",
+    "severity": "P3",
+    "body": "If the chosen preview model becomes unavailable, composition fails rather than switching to a tested fallback.\n\n**Fix:** optional fallback model policy after core stability is solved."
+  },
+  {
+    "number": 157,
+    "title": "AI output schema validation is not sufficiently strict",
+    "severity": "P1",
+    "body": "Even with structured generation, content-level semantic constraints are not fully enforced.\n\n**Fix:** validate required fields, lengths, URLs, evidence, and entity references after parsing."
+  },
+  {
+    "number": 158,
+    "title": "AI output can be accepted with weak/empty research",
+    "severity": "P2",
+    "body": "There is no hard requirement for minimum useful evidence before producing a draft.\n\n**Fix:** require a minimum evidence threshold or clearly mark low-evidence drafts."
+  },
+  {
+    "number": 159,
+    "title": "No grounding freshness policy",
+    "severity": "P2",
+    "body": "There is no explicit policy for how old research can be before it is considered stale.\n\n**Fix:** store retrieval timestamps and optionally refresh research before send."
+  },
+  {
+    "number": 160,
+    "title": "No research caching strategy",
+    "severity": "P3",
+    "body": "Repeated compose operations can trigger repeated research/model cost.\n\n**Fix:** cache normalized company/job research with expiry.\n\n---"
+  },
+  {
+    "number": 161,
+    "title": "Reply fallback can falsely match unrelated older messages",
+    "severity": "P1",
+    "body": "Matching mainly by sender can classify an unrelated message as a reply to the outreach.\n\n**Fix:** prefer `In-Reply-To`, `References`, thread/conversation identifiers, subject correlation, and time bounds."
+  },
+  {
+    "number": 162,
+    "title": "Reply matching does not persist the matched inbound Message-ID",
+    "severity": "P2",
+    "body": "You cannot audit exactly which inbound message caused the status change.\n\n**Fix:** store inbound message identifiers."
+  },
+  {
+    "number": 163,
+    "title": "Reply matching does not persist reply timestamp/snippet",
+    "severity": "P2",
+    "body": "The UI loses useful conversation metadata.\n\n**Fix:** store reply event metadata."
+  },
+  {
+    "number": 164,
+    "title": "IMAP failures are swallowed with `except Exception: pass`",
+    "severity": "P1",
+    "body": "Infrastructure failure can look like \u201cno replies.\u201d\n\n**Fix:** surface the error and preserve system state when checking fails."
+  },
+  {
+    "number": 165,
+    "title": "Reply detection only checks `INBOX`",
+    "severity": "P2",
+    "body": "Archived/moved messages can be missed.\n\n**Fix:** make mailbox scope configurable or use provider thread search where possible."
+  },
+  {
+    "number": 166,
+    "title": "No reply event history",
+    "severity": "P2",
+    "body": "A status flip to `replied` loses the inbound-event history.\n\n**Fix:** use `conversation_events`/`reply_events`."
+  },
+  {
+    "number": 167,
+    "title": "No bounce event model",
+    "severity": "P1",
+    "body": "Bounce handling is mostly manual rather than a first-class transport event.\n\n**Fix:** add DSN/bounce ingestion and suppression event logic later."
+  },
+  {
+    "number": 168,
+    "title": "Follow-up generation has the same missing `get_variant()` dependency",
+    "severity": "P0",
+    "body": "The follow-up path can hit the same missing resume API.\n\n**Fix:** share reliable resume lookup infrastructure."
+  },
+  {
+    "number": 169,
+    "title": "Follow-up generation has the same weak retry behavior",
+    "severity": "P1",
+    "body": "The API call is not fully wrapped in retry logic.\n\n**Fix:** share a common AI client/retry wrapper."
+  },
+  {
+    "number": 170,
+    "title": "Follow-up eligibility is not enforced centrally",
+    "severity": "P1",
+    "body": "UI visibility rules are not enough; APIs must enforce the same business policy.\n\n**Fix:** create a service-level eligibility check."
+  },
+  {
+    "number": 171,
+    "title": "No follow-up cancel/snooze mechanism",
+    "severity": "P2",
+    "body": "Users cannot easily pause or reschedule a due follow-up.\n\n**Fix:** model scheduling state explicitly."
+  },
+  {
+    "number": 172,
+    "title": "No per-contact follow-up cap",
+    "severity": "P2",
+    "body": "There is no obvious maximum number of follow-ups.\n\n**Fix:** configure campaign/contact-level follow-up limits."
+  },
+  {
+    "number": 173,
+    "title": "No follow-up suppression re-check at send time",
+    "severity": "P1",
+    "body": "A contact may become suppressed after draft creation but before follow-up send.\n\n**Fix:** re-check suppression immediately before transport."
+  },
+  {
+    "number": 174,
+    "title": "No send-window re-check for follow-up-specific operations",
+    "severity": "P1",
+    "body": "Follow-up generation may be allowed independent of eventual safe sending policy.\n\n**Fix:** separate drafting from sending but enforce transport constraints at send time."
+  },
+  {
+    "number": 175,
+    "title": "No thread/conversation model",
+    "severity": "P1",
+    "body": "The system uses individual email rows rather than a first-class conversation object.\n\n**Fix:** introduce conversation/thread semantics as the workflow matures.\n\n---"
+  },
+  {
+    "number": 176,
+    "title": "Extensive `innerHTML` use creates XSS risk",
+    "severity": "P0",
+    "body": "AI output, CSV data, names, emails, and error strings are inserted into the DOM using `innerHTML`/template interpolation.\n\n**Fix:** prefer `textContent` and DOM APIs, or carefully escape all untrusted values."
+  },
+  {
+    "number": 177,
+    "title": "Review inputs are built with unsafe HTML interpolation",
+    "severity": "P0",
+    "body": "Subjects/bodies can contain quotes or markup that break attributes/elements.\n\n**Fix:** create DOM elements and assign `.value`/`.textContent` directly."
+  },
+  {
+    "number": 178,
+    "title": "Toast rendering can be XSS-capable",
+    "severity": "P1",
+    "body": "Error/backend strings are injected into HTML.\n\n**Fix:** render toast content as text."
+  },
+  {
+    "number": 179,
+    "title": "QC warning rendering can be XSS-capable",
+    "severity": "P1",
+    "body": "AI/QC output is interpolated into HTML.\n\n**Fix:** escape/render as text."
+  },
+  {
+    "number": 180,
+    "title": "Contact/company data rendering can be XSS-capable",
+    "severity": "P1",
+    "body": "Imported CSV values can reach the DOM through HTML interpolation.\n\n**Fix:** use safe DOM APIs."
+  },
+  {
+    "number": 181,
+    "title": "No Content Security Policy",
+    "severity": "P2",
+    "body": "A CSP would reduce exploitability of frontend injection bugs.\n\n**Fix:** add a restrictive CSP compatible with the app."
+  },
+  {
+    "number": 182,
+    "title": "Missing common security headers",
+    "severity": "P2",
+    "body": "There is little visible protection using standard headers such as `X-Content-Type-Options` and `Referrer-Policy`.\n\n**Fix:** add sensible security headers."
+  },
+  {
+    "number": 183,
+    "title": "No CSRF protection",
+    "severity": "P1",
+    "body": "Authenticated state-changing POSTs would need CSRF defense depending on deployment model.\n\n**Fix:** add CSRF protection with session-based auth."
+  },
+  {
+    "number": 184,
+    "title": "No frontend auth state model",
+    "severity": "P1",
+    "body": "The UI assumes unrestricted API access.\n\n**Fix:** add authenticated session handling and route protection."
+  },
+  {
+    "number": 185,
+    "title": "Navigation uses `event.target` instead of `currentTarget`",
+    "severity": "P3",
+    "body": "Nested elements can cause the wrong node to receive active styling.\n\n**Fix:** use `e.currentTarget`."
+  },
+  {
+    "number": 186,
+    "title": "Frontend assumes every response is JSON",
+    "severity": "P1",
+    "body": "HTML error pages from Flask can make `res.json()` fail and mask the actual server error.\n\n**Fix:** robust content-type/error parsing."
+  },
+  {
+    "number": 187,
+    "title": "Async page loaders can create unhandled promise rejections",
+    "severity": "P2",
+    "body": "Top-level async calls are not consistently awaited/caught.\n\n**Fix:** centralize async error handling."
+  },
+  {
+    "number": 188,
+    "title": "UI state refresh is inconsistent after mutations",
+    "severity": "P2",
+    "body": "Some sections can remain stale until manually revisited.\n\n**Fix:** centralize cache invalidation/reload behavior."
+  },
+  {
+    "number": 189,
+    "title": "Send operation does not expose live progress",
+    "severity": "P2",
+    "body": "A long-running batch gives little operational feedback.\n\n**Fix:** job status endpoint/websocket/polling."
+  },
+  {
+    "number": 190,
+    "title": "UI does not display research evidence during review",
+    "severity": "P1",
+    "body": "The human reviewer cannot see the basis for the AI's personalization.\n\n**Fix:** evidence panel with source links/facts."
+  },
+  {
+    "number": 191,
+    "title": "UI does not display chosen resume",
+    "severity": "P2",
+    "body": "Reviewer cannot confirm which resume will be attached/linked.\n\n**Fix:** show selected variant and rationale."
+  },
+  {
+    "number": 192,
+    "title": "UI does not expose profile configuration",
+    "severity": "P1",
+    "body": "Users need backend/manual setup for basic candidate/profile changes.\n\n**Fix:** Settings/Profile page."
+  },
+  {
+    "number": 193,
+    "title": "UI does not expose company management",
+    "severity": "P1",
+    "body": "There is an API but no complete user-facing flow for creating/managing companies.\n\n**Fix:** Company/Job management UI."
+  },
+  {
+    "number": 194,
+    "title": "UI does not expose resume management",
+    "severity": "P1",
+    "body": "Same mismatch between backend capability and actual workflow.\n\n**Fix:** Resume manager."
+  },
+  {
+    "number": 195,
+    "title": "Review UI lacks job details/context needed for safe human approval",
+    "severity": "P2",
+    "body": "The reviewer sees the draft but not enough of the source job/context to verify it quickly.\n\n**Fix:** include job summary and evidence beside the draft."
+  },
+  {
+    "number": 196,
+    "title": "Tracking page includes unsent emails",
+    "severity": "P1",
+    "body": "Filtering only `status != pending_review` means approved/rejected/other unsent records can appear in \u201cAll Sent Emails.\u201d\n\n**Fix:** filter by actual send evidence such as `sent_at IS NOT NULL` for sent tracking."
+  },
+  {
+    "number": 197,
+    "title": "Manual tracking can mark unsent messages as replied",
+    "severity": "P1",
+    "body": "Because tracking UI/API exposes more than just truly sent messages.\n\n**Fix:** enforce `sent_at` prerequisite for reply/bounce status transitions."
+  },
+  {
+    "number": 198,
+    "title": "UI status names may not match actual backend semantics",
+    "severity": "P2",
+    "body": "Human workflow and transport states overlap.\n\n**Fix:** redesign labels/state model so users see clear lifecycle terminology."
+  },
+  {
+    "number": 199,
+    "title": "Modal accessibility is incomplete",
+    "severity": "P2",
+    "body": "There is no obvious full dialog semantics/focus trap/Escape behavior/`aria-modal` support.\n\n**Fix:** use accessible dialog patterns."
+  },
+  {
+    "number": 200,
+    "title": "Form controls do not use semantic `<label>` associations consistently",
+    "severity": "P2",
+    "body": "Visual labels are not always connected to fields for assistive technology.\n\n**Fix:** use `<label for=\"...\">` and proper form structure."
+  },
+  {
+    "number": 201,
+    "title": "Navigation uses non-semantic clickable `<div>` elements",
+    "severity": "P2",
+    "body": "Keyboard and screen-reader behavior suffers.\n\n**Fix:** use buttons/links with correct roles."
+  },
+  {
+    "number": 202,
+    "title": "Responsive/mobile behavior is limited",
+    "severity": "P3",
+    "body": "Dashboard layout is primarily desktop-oriented.\n\n**Fix:** add responsive states if mobile use matters."
+  },
+  {
+    "number": 203,
+    "title": "External Google Fonts add an unnecessary runtime dependency",
+    "severity": "P3",
+    "body": "Private/offline deployments still need a network call for fonts.\n\n**Fix:** use system fonts or self-host if privacy/offline operation matters."
+  },
+  {
+    "number": 204,
+    "title": "Manual `?v=6` cache-busting is brittle",
+    "severity": "P3",
+    "body": "Asset version strings are manually maintained.\n\n**Fix:** use hashed assets/build tooling or a better asset versioning strategy."
+  },
+  {
+    "number": 205,
+    "title": "Frontend has limited large-data handling",
+    "severity": "P2",
+    "body": "Lists load broadly without obvious pagination/filtering.\n\n**Fix:** add server-side pagination and filters.\n\n---"
+  },
+  {
+    "number": 206,
+    "title": "Missing indexes on frequently filtered foreign keys",
+    "severity": "P2",
+    "body": "Queries heavily use `company_id`, `contact_id`, and related fields.\n\n**Fix:** add appropriate indexes."
+  },
+  {
+    "number": 207,
+    "title": "Missing index on email status",
+    "severity": "P2",
+    "body": "Review/queue/tracking logic filters by status.\n\n**Fix:** index status."
+  },
+  {
+    "number": 208,
+    "title": "Missing index on `sent_at`",
+    "severity": "P2",
+    "body": "Quota/history queries filter by send time.\n\n**Fix:** index `sent_at`."
+  },
+  {
+    "number": 209,
+    "title": "Missing index on `follow_up_to_email_id`",
+    "severity": "P2",
+    "body": "Follow-up lookups depend on it.\n\n**Fix:** index it."
+  },
+  {
+    "number": 210,
+    "title": "`message_id` should be indexed/unique",
+    "severity": "P1",
+    "body": "Important for reply correlation and duplicate detection.\n\n**Fix:** unique/indexed provider message ID."
+  },
+  {
+    "number": 211,
+    "title": "`get_all_tracked_emails()` loads the whole history",
+    "severity": "P2",
+    "body": "Fine for a tiny dataset but not scalable.\n\n**Fix:** paginate and filter server-side."
+  },
+  {
+    "number": 212,
+    "title": "No pagination APIs",
+    "severity": "P2",
+    "body": "No standard `limit`/cursor/filter strategy exists for growing datasets.\n\n**Fix:** design paginated API responses."
+  },
+  {
+    "number": 213,
+    "title": "Company contact counts can become expensive",
+    "severity": "P2",
+    "body": "Repeated count queries per company can grow costly.\n\n**Fix:** proper indexes or aggregated/cached counts when scale requires."
+  },
+  {
+    "number": 214,
+    "title": "No backup/export workflow",
+    "severity": "P1",
+    "body": "A single SQLite file is a single point of failure.\n\n**Fix:** one-click backup/export and documented restore procedure."
+  },
+  {
+    "number": 215,
+    "title": "No schema versioning mechanism",
+    "severity": "P1",
+    "body": "Migrations are implicit rather than versioned through a migration table or SQLite user version.\n\n**Fix:** formalize schema versioning."
+  },
+  {
+    "number": 216,
+    "title": "Migration error handling relies on exception-message strings",
+    "severity": "P2",
+    "body": "Checking for text like `duplicate column` is brittle.\n\n**Fix:** use explicit schema inspection/version logic."
+  },
+  {
+    "number": 217,
+    "title": "Duplicate schema/migration definitions exist",
+    "severity": "P3",
+    "body": "Some tables are both in initial schema and migration logic.\n\n**Fix:** centralize schema creation and migrations."
+  },
+  {
+    "number": 218,
+    "title": "No historical event retention policy",
+    "severity": "P2",
+    "body": "Once event history is introduced, there will also need to be a retention/archive policy.\n\n**Fix:** plan storage lifecycle without deleting operational history needed for analytics."
+  },
+  {
+    "number": 219,
+    "title": "No campaign-level data partitioning",
+    "severity": "P1",
+    "body": "All outreach lives in one global pool.\n\n**Fix:** add a campaign entity and scope data to campaigns."
+  },
+  {
+    "number": 220,
+    "title": "No job-posting entity",
+    "severity": "P1",
+    "body": "Jobs are embedded in company records rather than independently modeled.\n\n**Fix:** create `job_postings` and connect outreach to specific jobs.\n\n---"
+  },
+  {
+    "number": 221,
+    "title": "`composer.py` has too many responsibilities",
+    "severity": "P2",
+    "body": "It handles prompts, Gemini calls, profile, suppression, signatures, resume selection, QC, and DB storage.\n\n**Fix:** split research/generation/personalization/email assembly/QC/orchestration."
+  },
+  {
+    "number": 222,
+    "title": "`sender.py` has too many responsibilities",
+    "severity": "P1",
+    "body": "It handles quotas, suppression, SMTP, delays, retries, attachments, and persistence.\n\n**Fix:** split queue selection, transport, retry policy, and persistence."
+  },
+  {
+    "number": 223,
+    "title": "Repository abstraction is inconsistent with actual code",
+    "severity": "P2",
+    "body": "The README says repository centralization exists, but multiple modules call `get_connection()` directly.\n\n**Fix:** route DB access through a coherent data-access layer."
+  },
+  {
+    "number": 224,
+    "title": "Architecture/documentation have drifted from the current code",
+    "severity": "P1",
+    "body": "Features from different generations are described as though they are currently integrated.\n\n**Fix:** update docs after every major refactor and add a feature-status matrix."
+  },
+  {
+    "number": 225,
+    "title": "CLI-era documentation remains after CLI changes",
+    "severity": "P2",
+    "body": "Some documentation still describes older CLI-first workflows.\n\n**Fix:** remove obsolete commands or document their current equivalent."
+  },
+  {
+    "number": 226,
+    "title": "Company research and job research are conflated",
+    "severity": "P1",
+    "body": "Personalization needs company facts, role requirements, and recipient context separately.\n\n**Fix:** model research scopes distinctly."
+  },
+  {
+    "number": 227,
+    "title": "Candidate claims are not structured",
+    "severity": "P1",
+    "body": "Free-form candidate context weakens validation and personalization control.\n\n**Fix:** structured candidate profile/project/achievement records."
+  },
+  {
+    "number": 228,
+    "title": "No campaign abstraction",
+    "severity": "P1",
+    "body": "Different outreach efforts cannot be cleanly separated, configured, or analyzed.\n\n**Fix:** add campaigns with settings, contacts, jobs, and analytics."
+  },
+  {
+    "number": 229,
+    "title": "No campaign-level analytics model",
+    "severity": "P2",
+    "body": "You cannot easily compare outcomes by campaign/job/source/role.\n\n**Fix:** attach all lifecycle events to campaign and derive analytics."
+  },
+  {
+    "number": 230,
+    "title": "Global state makes multi-campaign behavior confusing",
+    "severity": "P2",
+    "body": "The system has one global pool of emails and send limits.\n\n**Fix:** define scope: global safety caps plus campaign-level controls."
+  },
+  {
+    "number": 231,
+    "title": "Referral prioritization is hardcoded and simplistic",
+    "severity": "P2",
+    "body": "Only a binary `source == referral`-style preference is applied.\n\n**Fix:** configurable scoring across warm intros, alumni, referrals, recruiter, cold, etc."
+  },
+  {
+    "number": 232,
+    "title": "Statistics are not sufficiently normalized by ID",
+    "severity": "P2",
+    "body": "Resume stats use names as keys, so duplicate names can overwrite each other.\n\n**Fix:** use IDs internally, names for presentation."
+  },
+  {
+    "number": 233,
+    "title": "Stats silently swallow timestamp parsing errors",
+    "severity": "P2",
+    "body": "Bad data disappears from analytics without visibility.\n\n**Fix:** log and expose data-quality issues."
+  },
+  {
+    "number": 234,
+    "title": "Statistics use broad \u201csent\u201d logic that can hide inconsistencies",
+    "severity": "P2",
+    "body": "Combining status and timestamp can mask invalid data states.\n\n**Fix:** define one authoritative send-event model."
+  },
+  {
+    "number": 235,
+    "title": "Dead imports and stale code exist",
+    "severity": "P3",
+    "body": "There are imports/branches left from previous iterations.\n\n**Fix:** lint and remove dead code after refactors."
+  },
+  {
+    "number": 236,
+    "title": "No centralized business-rule service",
+    "severity": "P1",
+    "body": "Rules for approval, follow-up eligibility, suppression, quota, and state transitions are scattered.\n\n**Fix:** add application/service-layer policy functions."
+  },
+  {
+    "number": 237,
+    "title": "No invariant checks before sending",
+    "severity": "P1",
+    "body": "Transport should revalidate recipient, approval, suppression, resume availability, quota, send window, and state.\n\n**Fix:** one final pre-send validator."
+  },
+  {
+    "number": 238,
+    "title": "No invariant checks before approval",
+    "severity": "P2",
+    "body": "Approval should validate content/evidence/recipient before allowing send eligibility.\n\n**Fix:** make approval a meaningful state transition with checks."
+  },
+  {
+    "number": 239,
+    "title": "No durable event model for auditability",
+    "severity": "P1",
+    "body": "There is no chronological record of who/what changed an outreach item.\n\n**Fix:** status/review/send/reply events."
+  },
+  {
+    "number": 240,
+    "title": "No operational logging strategy",
+    "severity": "P1",
+    "body": "`print()` and swallowed exceptions are insufficient for diagnosing live workflows.\n\n**Fix:** structured logging with email/campaign/job IDs and error classes."
+  },
+  {
+    "number": 241,
+    "title": "No request/job correlation IDs",
+    "severity": "P2",
+    "body": "Tracing a send or AI failure across logs is difficult.\n\n**Fix:** add request/job IDs to logs and events."
+  },
+  {
+    "number": 242,
+    "title": "No retry/audit observability dashboard",
+    "severity": "P3",
+    "body": "Failures are not easy to inspect historically.\n\n**Fix:** expose job/send attempt diagnostics in admin UI."
+  },
+  {
+    "number": 243,
+    "title": "No clean separation between domain, transport, and persistence",
+    "severity": "P2",
+    "body": "Business logic is mixed with DB and SMTP concerns.\n\n**Fix:** introduce service boundaries without overengineering."
+  },
+  {
+    "number": 244,
+    "title": "No formal API contract/schema",
+    "severity": "P2",
+    "body": "Request/response structures are ad hoc.\n\n**Fix:** validate with Pydantic/Marshmallow/JSON Schema or a lightweight equivalent."
+  },
+  {
+    "number": 245,
+    "title": "API errors use inconsistent HTTP semantics",
+    "severity": "P2",
+    "body": "Missing resources, validation failures, upstream AI errors, and SMTP failures are all treated similarly.\n\n**Fix:** use meaningful 4xx/5xx distinctions."
+  },
+  {
+    "number": 246,
+    "title": "Global error handlers are missing/incomplete",
+    "severity": "P1",
+    "body": "Unhandled Flask errors can return HTML to a JSON API consumer.\n\n**Fix:** standard JSON error handlers."
+  },
+  {
+    "number": 247,
+    "title": "Raw exception text can leak implementation details",
+    "severity": "P2",
+    "body": "Returning `str(e)` to clients can expose internal details.\n\n**Fix:** log detailed errors server-side; return safe user-facing messages."
+  },
+  {
+    "number": 248,
+    "title": "No API rate limiting",
+    "severity": "P1",
+    "body": "Compose/research endpoints can be spammed by any party with network access.\n\n**Fix:** auth plus per-user/IP/request throttling."
+  },
+  {
+    "number": 249,
+    "title": "No request-size/type validation policy",
+    "severity": "P2",
+    "body": "Routes do ad-hoc field access rather than centralized request validation.\n\n**Fix:** validate JSON shape, field types, allowed values, and limits."
+  },
+  {
+    "number": 250,
+    "title": "No formal release/packaging pipeline",
+    "severity": "P1",
+    "body": "The current ZIP bundles runtime, databases, Git, personal data, bytecode, and source together.\n\n**Fix:** create a release script that produces only source/config templates/docs/tests and sanitizes everything private.\n\n---\n\n# Phase 12 \u2014 What is Actually Good\n\nThe audit is intentionally harsh, but the underlying project is worth continuing."
+  }
+]
