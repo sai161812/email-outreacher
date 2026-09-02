@@ -55,7 +55,13 @@
         <div id="view-contacts" class="view">
             <header>
                 <h1>Contacts</h1>
-                <button id="btn-show-add-contact" class="primary">Add New</button>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="primary" id="btn-show-add-contact">Add Contact</button>
+                    <label class="secondary button" style="cursor: pointer; padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border); font-size: 13px;">
+                        Import CSV
+                        <input type="file" id="inp-import-csv" accept=".csv" style="display: none;">
+                    </label>
+                </div>
             </header>
             <div class="table-container">
                 <table id="table-contacts">
@@ -146,6 +152,6 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toast-container"></div>
     
-    <script src="/static/app.js?v=5"></script>
+    <script src="/static/app.js?v=6"></script>
 </body>
 </html>

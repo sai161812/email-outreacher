@@ -48,6 +48,31 @@ def api_add_contact():
     cid = contacts.add_contact(data["company_id"], data["email"], data.get("name"), data.get("title"), data.get("source"))
     return jsonify({"id": cid})
 
+@app.route('/api/contacts/import', methods=['POST'])
+def api_import_csv():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+    
+    import tempfile
+    import os
+    from werkzeug.utils import secure_filename
+    
+    filename = secure_filename(file.filename)
+    tmp_path = os.path.join(tempfile.gettempdir(), filename)
+    file.save(tmp_path)
+    
+    try:
+        summary = contacts.import_csv(tmp_path)
+        return jsonify(summary)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
 @app.route('/api/compose', methods=['POST'])
 def api_compose():
     data = request.json
