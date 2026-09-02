@@ -78,13 +78,23 @@ def api_compose():
     data = request.json
     try:
         contact_id = data["contact_id"]
-        # Prevent drafting duplicates
         from repository import EmailRepository
         existing = EmailRepository.get_by_contact_id(contact_id)
         if any(e["status"] in ["pending_review", "approved", "sent"] for e in existing):
             return jsonify({"error": "An active email already exists for this contact."}), 400
             
-        eid = composer.compose_and_store(data["company_id"], contact_id, data.get("resume_variant_id"))
+        import os
+        context_text = ""
+        if os.path.exists("context.txt"):
+            with open("context.txt", "r", encoding="utf-8") as f:
+                context_text = f.read()
+                
+        eid = composer.compose_and_store(
+            company_id=data["company_id"], 
+            contact_id=contact_id, 
+            candidate_context=context_text, 
+            resume_variant_id=data.get("resume_variant_id")
+        )
         return jsonify({"id": eid})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
