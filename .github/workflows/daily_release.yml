@@ -1,8 +1,7 @@
-name: Automated Daily Contribution Release
+﻿name: Automated Daily Contribution Release
 
 on:
   schedule:
-    # Runs twice daily: 05:30 UTC (11:00 AM IST) and 12:30 UTC (6:00 PM IST)
     - cron: '30 5 * * *'
     - cron: '30 12 * * *'
   workflow_dispatch:
@@ -26,14 +25,13 @@ jobs:
 
       - name: Advance Main to Today's Target
         run: |
+          # Use IST date
           CURRENT_DATE=$(TZ='Asia/Kolkata' date +'%Y-%m-%d')
           echo "Current Date (IST): $CURRENT_DATE"
 
+          # Get populated targets from staging branch
+          git checkout staging -- .github/daily_targets.json
           TARGETS_FILE=".github/daily_targets.json"
-          if [ ! -f "$TARGETS_FILE" ]; then
-            echo "Targets file not found, skipping."
-            exit 0
-          fi
 
           TARGET_SHA=$(jq -r --arg date "$CURRENT_DATE" '.[$date].target_sha // empty' "$TARGETS_FILE")
 
@@ -50,5 +48,19 @@ jobs:
             exit 0
           fi
 
-          git push origin $TARGET_SHA:refs/heads/main
+          # Checkout the target commit
+          git checkout $TARGET_SHA
+
+          # Restore our workflow file and targets so they are always present on main
+          git checkout main -- .github/workflows/daily_release.yml
+          git checkout staging -- .github/daily_targets.json
+
+          # Amend the commit to include the workflow files
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add .github/
+          git commit --amend --no-edit
+
+          # Force push to main
+          git push origin HEAD:refs/heads/main --force
           echo "Successfully pushed target commits up to $TARGET_SHA for $CURRENT_DATE!"
