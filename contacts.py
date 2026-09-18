@@ -16,11 +16,11 @@ def add_company(name, domain=None, job_url=None, job_text=None, notes=None):
 def add_contact(company_id, email, name=None, title=None, source=None):
     if not validate.is_valid_syntax(email):
         raise ValueError(f"Invalid email address: {email}")
-        
+
     c = CompanyRepository.get_by_id(company_id)
     if not c:
         raise ValueError(f"Company ID {company_id} does not exist.")
-    
+
     return ContactRepository.create(company_id, email, name, title, source)
 
 def normalize_company_name(name):
@@ -34,10 +34,10 @@ def find_company_by_name(name, domain=None):
         # SQLite raw was used before, let's use repository
         # It's fine to do it here via the repo by getting all and matching
         pass
-    
+
     norm_name = normalize_company_name(name)
     rows = CompanyRepository.get_all()
-    
+
     if domain:
         for r in rows:
             if r["domain"] and r["domain"].strip().lower() == domain.strip().lower():
@@ -52,7 +52,7 @@ def find_company_by_name(name, domain=None):
 def import_csv(file_path):
     summary = {"companies_created": 0, "contacts_created": 0, "errors": []}
     company_cache = {}  # name.lower() -> company_id
-    
+
     import_path = Path(file_path)
     if not import_path.exists():
         raise FileNotFoundError(f"CSV file not found: {file_path}")
@@ -81,7 +81,7 @@ def import_csv(file_path):
 
             domain = (row.get("domain") or "").strip()
             cache_key = (normalize_company_name(name).lower(), domain.lower() if domain else "")
-            
+
             if cache_key in company_cache:
                 company_id = company_cache[cache_key]
             else:

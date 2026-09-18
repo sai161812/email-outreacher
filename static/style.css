@@ -3,7 +3,7 @@
     --bg-base: #F7F8FA;
     --bg-surface: #FFFFFF;
     --bg-hover: #F0F2F5;
-    
+
     --text-92: rgba(0, 0, 0, 0.92);
     --text-78: rgba(0, 0, 0, 0.78);
     --text-55: rgba(0, 0, 0, 0.55);
@@ -12,9 +12,9 @@
     --text-08: rgba(0, 0, 0, 0.08);
 
     --border: var(--text-08);
-    
+
     --accent: #4FA6D9;
-    
+
     /* Slightly darkened status colors for better contrast on white */
     --status-success: #3D9969;
     --status-warning: #C7922E;
@@ -361,7 +361,7 @@ button.secondary:hover {
 button.destructive {
     background-color: transparent;
     color: var(--status-danger);
-    border: 1px solid transparent; 
+    border: 1px solid transparent;
 }
 button.destructive:hover {
     background-color: var(--bg-hover);
