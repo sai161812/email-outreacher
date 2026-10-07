@@ -1,0 +1,3 @@
+Replace this example with facts you can support: your current education, the role you want,
+skills you actually use, and projects you built. Include URLs or measured results only when
+they are accurate. Save your own facts through Settings or in candidate_context.txt.

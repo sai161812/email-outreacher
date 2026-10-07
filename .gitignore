@@ -7,6 +7,7 @@
 *.sqlite-*
 backups/
 candidate_context.txt
+context.txt
 __pycache__/
 *.pyc
 venv/

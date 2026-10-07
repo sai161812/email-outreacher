@@ -1,114 +1,102 @@
+"""Incremental, read-only IMAP scanning with exact thread matching."""
+import email
 import imaplib
+import json
 import re
-
+from datetime import timezone
+from email.utils import getaddresses,parsedate_to_datetime
 import config
-from repository import EmailRepository
 import tracker
+from errors import ProviderError
+from db import get_connection
+from repository import EmailRepository,rows,timestamp
+from followups import parsed_time
 
-def _clean_header_str(val):
-    if not val:
-        return ""
-    if isinstance(val, bytes):
-        return val.decode("utf-8", errors="ignore")
-    return str(val)
+def classify(message):
+    if message.get_content_type()=="multipart/report":
+        for part in message.walk():
+            if part.get_content_type()=="message/delivery-status":
+                for block in part.get_payload():
+                    if block.get("Action","").lower()=="failed" and block.get("Status","").startswith("5."):
+                        return "bounced"
+        return "automatic"
+    if message.get("Auto-Submitted","no").lower()!="no" or message.get("Precedence","").lower() in {"bulk","list","junk"} or message.get("X-Autoreply") or message.get("X-Autorespond"):
+        return "automatic"
+    return "human"
+
+def matched_candidates(message,candidates):
+    ids=set(re.findall(r"<[^<>\s]+>", " ".join(message.get_all("References",[])+message.get_all("In-Reply-To",[]))))
+    senders={a.strip().lower() for _,a in getaddresses(message.get_all("From",[]))}
+    try:
+        received=parsedate_to_datetime(message.get("Date",""))
+        if not received.tzinfo: received=received.replace(tzinfo=timezone.utc)
+    except (TypeError,ValueError,IndexError):
+        return []
+    kind=classify(message)
+    if kind=="automatic":
+        return []
+    return [c for c in candidates if c.get("message_id") in ids and c["sent_at"] and received>=parsed_time(c["sent_at"])
+            and (kind=="bounced" or c["contact_email"].strip().lower() in senders)]
+
+def _ok(result,operation):
+    status,data=result
+    if status!="OK":
+        raise ProviderError(f"IMAP {operation} failed")
+    return data
 
 def check_replies(dry_run=False):
+    config.require_gmail_creds()
+    candidates=EmailRepository.get_sent_candidates_for_replies()
+    if not candidates:
+        return []
+    mailbox=None
+    matches=[]
     try:
-        config.require_gmail_creds()
-        imap = imaplib.IMAP4_SSL(config.IMAP_HOST)
-        imap.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
-        imap.select("INBOX")
-    except Exception as e:
-        raise ValueError(f"IMAP Error: {e}")
-
-    try:
-        candidates = EmailRepository.get_sent_candidates_for_replies()
-        candidates = [dict(c) for c in candidates]
-        if not candidates:
-            return []
-
-        contact_counts = {}
-        for c in candidates:
-            c_email = (c["contact_email"] or "").strip().lower()
-            contact_counts[c_email] = contact_counts.get(c_email, 0) + 1
-
-        matches = []
-        already_matched_ids = set()
-
-        for c in candidates:
-            if c["id"] in already_matched_ids:
-                continue
-
-            c_email = (c["contact_email"] or "").strip().lower()
-            msg_id = (c.get("message_id") or "").strip()
-            matched = False
-            match_type = None
-
-            if msg_id:
-                clean_id = msg_id.strip("<> ")
-                search_queries = [
-                    f'HEADER References "{clean_id}"',
-                    f'HEADER In-Reply-To "{clean_id}"',
-                    f'HEADER References "{msg_id}"',
-                    f'HEADER In-Reply-To "{msg_id}"',
-                ]
-                found_msg_nums = set()
-                for query in search_queries:
-                    try:
-                        typ, data = imap.search(None, query)
-                        if typ == "OK" and data and data[0]:
-                            for num in data[0].split():
-                                found_msg_nums.add(num)
-                    except Exception:
-                        pass
-
-                if not found_msg_nums and c_email:
-                    try:
-                        typ, data = imap.search(None, f'FROM "{c_email}"')
-                        if typ == "OK" and data and data[0]:
-                            for num in data[0].split():
-                                typ, fetch_data = imap.fetch(num, '(BODY.PEEK[HEADER.FIELDS (IN-REPLY-TO REFERENCES)])')
-                                if typ == "OK" and fetch_data and isinstance(fetch_data[0], tuple):
-                                    hdr_text = _clean_header_str(fetch_data[0][1])
-                                    if clean_id in hdr_text or msg_id in hdr_text:
-                                        found_msg_nums.add(num)
-                                        break
-                    except Exception:
-                        pass
-
-                if found_msg_nums:
-                    matched = True
-                    match_type = "message_id"
-
-            else:
-                if contact_counts.get(c_email, 0) == 1 and c_email:
-                    try:
-                        typ, data = imap.search(None, f'FROM "{c_email}"')
-                        if typ == "OK" and data and data[0] and data[0].split():
-                            matched = True
-                            match_type = "address_fallback"
-                    except Exception:
-                        pass
-
-            if matched:
-                already_matched_ids.add(c["id"])
-                match_info = {
-                    "email_id": c["id"],
-                    "contact_email": c["contact_email"],
-                    "match_type": match_type,
-                }
+        mailbox=imaplib.IMAP4_SSL(config.IMAP_HOST,timeout=config.PROVIDER_TIMEOUT)
+        _ok(mailbox.login(config.GMAIL_ADDRESS,config.GMAIL_APP_PASSWORD),"login")
+        _ok(mailbox.select("INBOX",readonly=True),"select")
+        validity_data=mailbox.response("UIDVALIDITY")[1]
+        validity=(validity_data[0] if validity_data else b"unknown").decode()
+        if validity=="unknown":
+            raise ProviderError("IMAP UIDVALIDITY is unavailable")
+        scope=f"{config.GMAIL_ADDRESS.lower()}:INBOX:{validity}"
+        previous=rows("SELECT value FROM settings WHERE key=?",("imap_cursor:"+scope,))
+        last=int(previous[0]["value"]) if previous else 0
+        found=_ok(mailbox.uid("search",None,"UID",f"{last+1}:*"),"search")
+        uids=[int(v) for v in (found[0] or b"").split() if int(v)>last]
+        for uid in sorted(uids)[:500]:
+            processed=rows("SELECT 1 FROM reply_messages WHERE uidvalidity=? AND uid=?",(scope,str(uid)))
+            if processed: continue
+            fetched=_ok(mailbox.uid("fetch",str(uid),"(BODY.PEEK[HEADER] RFC822.SIZE)"),"fetch")
+            chunks=[v for v in fetched if isinstance(v,tuple)]
+            if not chunks:
+                raise ProviderError("IMAP returned an unreadable message header")
+            metadata,raw=chunks[0]
+            message=email.message_from_bytes(raw)
+            if message.get_content_type()=="multipart/report":
+                sizes=re.findall(rb"RFC822.SIZE (\d+)",metadata)
+                if not sizes or int(sizes[0])>config.MAX_UPLOAD_BYTES:
+                    raise ProviderError("Delivery report exceeds scan size limit")
+                complete=_ok(mailbox.uid("fetch",str(uid),"(BODY.PEEK[])"),"fetch delivery report")
+                raw=next((v[1] for v in complete if isinstance(v,tuple)),b"")
+                message=email.message_from_bytes(raw)
+            matched=matched_candidates(message,candidates)
+            for candidate in matched:
+                kind=classify(message)
+                matches.append({"email_id":candidate["id"],"contact_email":candidate["contact_email"],"match_type":"exact_thread","kind":kind})
                 if not dry_run:
-                    tracker.mark_replied(c["id"])
-                matches.append(match_info)
-
+                    if kind=="bounced": tracker.mark_bounced(candidate["id"])
+                    else: tracker.mark_replied(candidate["id"])
+            if not dry_run:
+                with get_connection() as conn:
+                    conn.execute("INSERT OR IGNORE INTO reply_messages VALUES (?,?,?,?)",(scope,str(uid),message.get("Message-ID"),timestamp()))
+                    conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)",("imap_cursor:"+scope,str(uid)))
         return matches
-
+    except ProviderError:
+        raise
+    except Exception as exc:
+        raise ProviderError("IMAP check failed. Check account settings and connectivity; progress is retained.") from exc
     finally:
-        try:
-            imap.close()
-        except Exception:
-            pass
-        try:
-            imap.logout()
-        except Exception:
-            pass
+        if mailbox:
+            try: mailbox.logout()
+            except Exception: pass

@@ -1,1 +1,0 @@
-I am a highly skilled Rust developer who built an OS from scratch in 3 days. I love to mention my rust OS in all emails.

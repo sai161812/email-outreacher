@@ -1,0 +1,46 @@
+from email.message import EmailMessage
+from email.utils import format_datetime
+from datetime import timedelta
+from unittest.mock import Mock
+import pytest
+import config
+import replies
+from errors import ProviderError
+from repository import EmailRepository
+from db import get_connection
+
+def message(reference="<sent@test>",sender="person@example.test",old=False,auto=False):
+    msg=EmailMessage()
+    msg["From"]=sender
+    msg["Date"]=format_datetime(config.now()-timedelta(days=20) if old else config.now())
+    msg["In-Reply-To"]=reference
+    if auto: msg["Auto-Submitted"]="auto-replied"
+    return msg
+
+def candidate():
+    return {"id":1,"message_id":"<sent@test>","contact_email":"person@example.test","sent_at":(config.now()-timedelta(days=1)).isoformat()}
+
+@pytest.mark.parametrize("kwargs",[{"reference":"<sent@test.extra>"},{"sender":"other@example.test"},{"old":True},{"auto":True}])
+def test_false_replies_rejected(kwargs):
+    assert replies.matched_candidates(message(**kwargs),[candidate()])==[]
+
+def test_exact_reply_matches():
+    assert replies.matched_candidates(message(),[candidate()])[0]["id"]==1
+
+def test_no_id_has_no_address_fallback():
+    c=candidate();c["message_id"]=None
+    assert replies.matched_candidates(message(),[c])==[]
+
+def test_login_failure_cleans_up(contact,monkeypatch):
+    company,person=contact
+    eid=EmailRepository.create(company,person,None,"H","S","B",None)
+    with get_connection() as conn:
+        conn.execute("UPDATE emails SET status='sent',sent_at=? WHERE id=?",(config.now().isoformat(),eid))
+    mailbox=Mock()
+    mailbox.login.side_effect=RuntimeError("login")
+    monkeypatch.setattr(config,"GMAIL_ADDRESS","owner@example.test")
+    monkeypatch.setattr(config,"GMAIL_APP_PASSWORD","test")
+    monkeypatch.setattr(replies.imaplib,"IMAP4_SSL",Mock(return_value=mailbox))
+    with pytest.raises(ProviderError):
+        replies.check_replies()
+    mailbox.logout.assert_called_once()
