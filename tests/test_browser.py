@@ -96,6 +96,69 @@ def test_settings_mutations_preserve_unsaved_profile(browser_app):
     expect(page.get_by_label("full name",exact=True)).to_have_value("Unsaved candidate")
     assert errors==[]
 
+def test_expired_session_cannot_render_a_stale_dashboard(browser_app):
+    page,url,_,errors=browser_app
+    held=[]
+    page.route("**/api/settings",lambda route:held.append(route))
+    page.route("**/api/stats",lambda route:route.fulfill(status=401,json={"error":"Sign in again"}))
+    page.goto(url)
+    expect(page.get_by_role("heading",name="Owner sign in",exact=True)).to_be_visible()
+    held.pop().continue_()
+    expect(page.get_by_role("heading",name="Dashboard",exact=True)).to_have_count(0)
+    expect(page.locator("#content")).to_have_attribute("aria-busy","false")
+    assert errors==[]
+
+def test_due_followup_review_send_and_reply_closes_thread(browser_app,contact,monkeypatch):
+    from datetime import timedelta
+    from email import message_from_bytes
+    import candidate_profile
+    import reviewer
+    from repository import EmailRepository
+    page,url,smtp,errors=browser_app
+    company,person=contact
+    candidate_profile.set_profile(full_name="Candidate")
+    config.CONTEXT_PATH.write_text("Built a Python dashboard.",encoding="utf8")
+    original=EmailRepository.create(company,person,None,"Hook","Original subject","Original body",None)
+    current=config.now()
+    monkeypatch.setattr(config,"now",lambda:current-timedelta(days=config.FOLLOW_UP_AFTER_DAYS+1))
+    reviewer.approve(original)
+    assert sender.run_send_batch()[0]["status"]=="sent"
+    original_id=EmailRepository.get_by_id(original)["message_id"]
+    monkeypatch.setattr(config,"now",lambda:current)
+    monkeypatch.setattr(composer,"compose_follow_up",lambda *args:{"subject":"Re: Original subject","body":"Following up on my Python dashboard experience. Open to a brief chat?"})
+    page.goto(url)
+    open_view(page,"Tracking")
+    with page.expect_response(lambda response:response.url.endswith(f"/api/tracking/{original}/followup")) as queued:
+        page.get_by_role("button",name="Draft follow-up",exact=True).click()
+    assert queued.value.status==202
+    assert jobs.process_next()
+    job=jobs.list_jobs()[0]
+    assert job["status"]=="complete"
+    followup=job["result"]["id"]
+    open_view(page,"Review")
+    expect(page.get_by_label("Subject",exact=True)).to_have_value("Re: Original subject")
+    page.get_by_role("button",name="Approve saved revision").click()
+    expect(page.get_by_role("button",name="Approve saved revision")).to_have_count(0)
+    open_view(page,"Queue")
+    with page.expect_response(lambda response:response.url.endswith("/api/send")) as queued:
+        page.get_by_role("button",name="Send approved batch",exact=True).click()
+    assert queued.value.status==202
+    assert jobs.process_next()
+    assert jobs.list_jobs()[0]["result"]["counts"]["sent"]==1
+    assert smtp.sendmail.call_count==2
+    delivered=message_from_bytes(smtp.sendmail.call_args.args[2])
+    assert delivered["In-Reply-To"]==original_id
+    assert delivered["References"]==original_id
+    open_view(page,"Tracking")
+    choice=page.get_by_label(f"Outcome for email #{followup}",exact=True)
+    choice.select_option("replied")
+    choice.locator("..").get_by_role("button",name="Apply outcome",exact=True).click()
+    expect(page.get_by_role("cell",name="replied",exact=True)).to_have_count(2)
+    assert EmailRepository.get_by_id(original)["status"]=="replied"
+    assert EmailRepository.get_by_id(followup)["status"]=="replied"
+    assert page.get_by_role("button",name="Draft follow-up",exact=True).count()==0
+    assert errors==[]
+
 def test_full_setup_review_send_workflow(browser_app):
     page,url,smtp,errors=browser_app
     page.goto(url)

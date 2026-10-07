@@ -10,7 +10,7 @@ Windows PowerShell, from the repository:
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip==26.2.1
 .\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.lock
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 # Edit .env with your own settings.
 .\.venv\Scripts\python.exe manage.py init
 .\.venv\Scripts\python.exe -m waitress --listen=127.0.0.1:5000 app:app
@@ -30,7 +30,7 @@ Linux/macOS equivalents:
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip==26.2.1
 .venv/bin/python -m pip install --require-hashes -r requirements.lock
-cp .env.example .env
+test -f .env || cp .env.example .env
 .venv/bin/python manage.py init
 .venv/bin/python -m waitress --listen=127.0.0.1:5000 app:app
 # Second terminal:
@@ -57,6 +57,7 @@ Email syntax supports ASCII dot-atom local parts and domain labels, at most 254 
 Edit .env before starting both processes. Changes require restarting both.
 
 - GEMINI_API_KEY and GEMINI_MODEL select generation. Missing/invalid/blocked output never becomes an approved draft. Model access and search-grounding support depend on the account and selected model.
+- The default Gemini 3.1 Pro Preview supports structured output with search grounding. API usage requires a billed project; AI Studio access alone does not establish API access. See [Google's model guide](https://ai.google.dev/gemini-api/docs/gemini-3/) and [structured-output documentation](https://ai.google.dev/gemini-api/docs/structured-output).
 - GMAIL_ADDRESS and GMAIL_APP_PASSWORD configure SMTP/IMAP. Use an app password where your account permits it, never the normal account password.
 - Personal Gmail's IMAP access is always enabled; the old Enable IMAP toggle was removed in January 2025. Workspace administrators may restrict client access or app passwords. See [Google's email-client guidance](https://support.google.com/mail/answer/7126229?hl=en) and [app-password requirements](https://support.google.com/accounts/answer/185833?hl=en).
 - OUTREACH_TIMEZONE defaults to Asia/Kolkata. Storage timestamps are UTC; windows, weekday metrics and daily quotas use the configured local timezone. Company limits cover the preceding rolling seven days.
@@ -71,9 +72,13 @@ Approval covers a specific revision, recipient, company name and resume asset. E
 
 SMTP cannot guarantee exactly-once delivery through a disconnect or process crash. A message gets a stable Message-ID and durable attempt before submission. Ambiguous/post-acceptance failures become **uncertain** and never retry automatically. Find that exact Message-ID in Sent Mail or provider records, then confirm delivered/not sent in Tracking. Confirmation is an operator assertion, not independent provider verification. A definitely failed/not-sent message returns to review and needs fresh approval.
 
+Confirmation is atomic: competing decisions cannot both succeed. For an uncertain message confirmed sent later, sent_at uses the recorded submission-start time (reservation time if an older attempt lacks that event), rather than the confirmation date. This is the application's recorded send-time estimate; the event log retains the later confirmation time.
+
 Accepted sends continue counting after replies/bounces/outcomes. Outstanding and uncertain reservations conservatively consume quota even across dates until resolved. Suppressions block future preflight checks and cancel unsubmitted drafts; they cannot recall mail already submitted. Deferred approved messages need another explicitly queued batch. Batches are not rescheduled automatically.
 
 Reply scans are read-only, fetch up to 500 new UIDs per operation, retain UIDVALIDITY-scoped progress, and require exact Message-ID/thread, sender and date evidence. Address-only historical messages and auto-replies are not counted as human replies. Messages without usable threading evidence require manual tracking; only confidently matched delivery reports can become bounces. Follow-ups require an actually sent, unanswered, due thread and share eligibility checks at drafting, approval and delivery. The default is one follow-up after seven days.
+
+Delivery reports require a permanent failure for the matching recipient and the exact original Message-ID, including IDs returned in message/rfc822 or text/rfc822-headers parts ([RFC 3464](https://www.rfc-editor.org/rfc/rfc3464), [RFC 6522](https://www.rfc-editor.org/rfc/rfc6522)). Reports do not downgrade an already recorded reply/interview. Oversized reports are listed as skipped in job results for manual inspection; later inbox messages continue scanning.
 
 Funnel rates count **sent messages, including follow-ups**, not unique people. Sent totals remain stable through outcomes. Research claims still need human verification. Caps and delays do not guarantee inbox placement or compliance with provider account limits.
 

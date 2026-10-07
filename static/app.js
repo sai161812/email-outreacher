@@ -250,6 +250,7 @@ async function pollOperation(){
 const loaders={Dashboard:dashboard,Contacts:contactsView,Companies:companiesView,Review:reviewView,Queue:queueView,Tracking:trackingView,Settings:settingsView,Jobs:jobsView};
 async function loginScreen(){
     loggedIn=false;epoch++;
+    content.setAttribute("aria-busy","false");
     const password=input("","password");password.autocomplete="current-password";
     content.replaceChildren(card("Owner sign in",field("Password",password),button("Sign in",async()=>{const r=await api("/api/login","POST",{password:password.value});csrf=r.csrf;await boot();},"primary")));
 }
