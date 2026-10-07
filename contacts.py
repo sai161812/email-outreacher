@@ -27,9 +27,11 @@ def normalize_company_name(name):
 def domain_name(value):
     if not value:
         return None
-    value=text(value,"domain",maximum=253).lower()
+    value=text(value,"domain",maximum=253)
+    if not value: return None
+    value=value.lower()
     host=urlparse(value if "://" in value else "//"+value).hostname
-    if not host or not re.fullmatch(r"[a-z0-9.-]+",host) or "." not in host:
+    if not host or "." not in host or any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?",label) for label in host.rstrip(".").split(".")):
         raise ValueError("Enter a valid company domain")
     return host.rstrip(".")
 
@@ -47,7 +49,7 @@ def add_contact(company_id,email,name=None,title=None,source=None):
 def find_company_by_name(name,domain=None):
     target=normalize_company_name(name).casefold()
     normalized=domain_name(domain)
-    return next((c for c in CompanyRepository.get_all() if c["name"].casefold()==target or normalized and c["domain"]==normalized),None)
+    return CompanyRepository.find_identity(target,normalized)
 
 def import_csv(file_path):
     with Path(file_path).open("r",encoding="utf-8-sig",newline="") as source:
@@ -103,8 +105,8 @@ def import_stream(source):
         raise ValueError("Malformed CSV") from exc
     return summary
 
-def list_companies():
-    return CompanyRepository.get_all()
+def list_companies(limit=500,offset=0,search=""):
+    return CompanyRepository.get_all(limit,offset,search)
 
 def get_company(cid):
     result=CompanyRepository.get_by_id(cid)

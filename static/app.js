@@ -2,6 +2,8 @@
 const content=document.getElementById("content"),nav=document.getElementById("navigation");
 let csrf="",view="Dashboard",epoch=0,dirty=new Set(),contactsOffset=0,contactSearch="",settingsCache=null,loggedIn=false;
 const pendingWrites=new Set();
+const offsets={Companies:0,Review:0,Queue:0,Tracking:0};
+let operationId=null;
 const pages=["Dashboard","Contacts","Companies","Review","Queue","Tracking","Settings","Jobs"];
 function el(tag,attrs={},...children){
     const node=document.createElement(tag);
@@ -56,6 +58,7 @@ function modal(heading,form){
 }
 async function queued(path,data={}){
     const job=await api(path,"POST",data);
+    operationId=job.id;
     toast("Operation queued. See Jobs for progress and results.");
     document.getElementById("operation-status").textContent="Job #"+job.id+" is "+job.status+". A worker processes queued operations.";
     return job;
@@ -79,7 +82,7 @@ async function dashboard(){
     const missing=Object.entries(setup.readiness).filter(([,ready])=>!ready).map(([key])=>key);
     if(missing.length)root.append(el("p",{class:"notice"},"Setup needed: "+missing.join(", ")+". Open Settings before drafting or sending."));
     root.append(el("div",{class:"grid"},["pending_review","approved","sent","replied"].map(key=>card(key.replaceAll("_"," "),el("div",{class:"metric"},data.summary[key]||0)))));
-    root.append(card("Resume performance",el("p",{class:"muted"},"Rates count sent messages, including follow-ups."),table(["Resume","Sent","Replies","Interviews","Offers","Reply rate"],data.stats.by_variant.map(v=>el("tr",{},[v.name,v.sent,v.replied,v.interviews,v.offers,v.reply_rate+"%"].map(cell))))));
+    root.append(card("Resume performance",el("p",{class:"muted"},"Rates count sent messages, including follow-ups."),table(["Resume","Sent","Replies","Interviews","Offers","Reply rate"],data.stats.by_variant.map(v=>el("tr",{},[v.name,v.sent,v.replied,v.interviews,v.offers,v.reply_rate+"%"].map(value=>cell(value)))))));
     return root;
 }
 async function contactsView(){
@@ -88,7 +91,7 @@ async function contactsView(){
     const file=el("input",{type:"file",accept:".csv","aria-label":"Import contacts CSV"});
     file.addEventListener("change",async()=>{if(!file.files.length)return;const form=new FormData();form.append("file",file.files[0]);try{const r=await api("/api/contacts/import","POST",form);toast(r.contacts_created+" contacts added; "+r.duplicates_skipped+" duplicates skipped.");if(r.errors.length)toast(r.errors.map(e=>"Row "+e.row+": "+e.error).join("; "),true);await render();}catch(e){toast(e.message,true);}finally{file.value="";}});
     const root=el("div",{},title("Contacts",button("Add contact",()=>contactForm(companies)),button("Search",async()=>{contactSearch=search.value;contactsOffset=0;await render();})),field("Search name, company or email",search),field("Import CSV",file));
-    root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"—",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>queued("/api/compose",{company_id:p.company_id,contact_id:p.id})),button("Edit",()=>contactForm(companies,p))))))));
+    root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"—",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>queued("/api/compose",{company_id:p.company_id,contact_id:p.id})),button("Edit",()=>contactForm(companies,p)),button("Check DNS",async()=>{const result=await api("/api/contacts/"+p.id+"/validate","POST",{});toast((result.warning||"Domain accepts mail in DNS")+". "+result.note,!!result.warning);})))))));
     if(!people.length)root.append(el("p",{},"No contacts found. Add a company first, or import the sample CSV."));
     root.append(el("div",{class:"actions"},button("Previous",async()=>{contactsOffset=Math.max(0,contactsOffset-100);await render();}),button("Next",async()=>{if(people.length===100){contactsOffset+=100;await render();}})));
     return root;
@@ -103,8 +106,9 @@ function contactForm(companies,person=null){
     if(person)body.append(button("Archive",async()=>{await api("/api/contacts/"+person.id,"PATCH",{archived:true});dialog.close();await render();},"danger"));
 }
 async function companiesView(){
-    const companies=await api("/api/companies");
-    return el("div",{},title("Companies",button("Add company",()=>companyForm())),table(["Company","Domain","Contacts","Actions"],companies.map(c=>el("tr",{},cell(c.name,true),cell(c.domain||"—"),cell(c.contact_count),cell(button("Edit",()=>companyForm(c)))))));
+    const companies=await api("/api/companies?limit=100&offset="+offsets.Companies);
+    const root=el("div",{},title("Companies",button("Add company",()=>companyForm())),table(["Company","Domain","Contacts","Actions"],companies.map(c=>el("tr",{},cell(c.name,true),cell(c.domain||"—"),cell(c.contact_count),cell(button("Edit",()=>companyForm(c)))))));
+    paginate(root,"Companies",companies);return root;
 }
 function companyForm(company=null){
     const fields={name:input(company?.name),domain:input(company?.domain),job_url:input(company?.job_url,"url"),job_text:el("textarea",{value:company?.job_text||""}),notes:el("textarea",{value:company?.notes||""})};
@@ -113,7 +117,7 @@ function companyForm(company=null){
     body.append(button("Save",async()=>{const data=Object.fromEntries(Object.entries(fields).map(([key,node])=>[key,node.value]));await api(company?"/api/companies/"+company.id:"/api/companies",company?"PATCH":"POST",data);dialog.close();await render();},"primary"));
 }
 async function reviewView(){
-    const [drafts,setup]=await Promise.all([api("/api/review"),api("/api/settings")]);
+    const [drafts,setup]=await Promise.all([api("/api/review?limit=100&offset="+offsets.Review),api("/api/settings")]);
     const root=el("div",{},title("Review queue"));
     if(!drafts.length)root.append(el("p",{},"No drafts awaiting review."));
     for(let draft of drafts){
@@ -128,29 +132,41 @@ async function reviewView(){
         section.append(el("details",{},el("summary",{},"Research notes and sources"),el("pre",{},draft.research_notes||"No source evidence saved; verify company claims independently."),
             el("ul",{class:"sources"},[...new Set((draft.research_notes||"").match(/https:\/\/[^\s<>]+/g)||[])].map(url=>el("li",{},safeLink(url,url)))),
             el("pre",{},draft.grounding_json||"")));
-        if(draft.resume_variant_id)section.append(el("a",{href:"/api/resumes/"+draft.resume_variant_id+"/pdf",class:"button"},"Download selected PDF"));
+        const asset=el("div",{});
+        function showAsset(){
+            const selected=setup.resumes.find(r=>r.id===Number(variant.value));
+            asset.replaceChildren(el("p",{class:"muted"},"Delivery mode: "+setup.configuration.resume_mode));
+            if(!selected)asset.append(el("p",{},"No resume selected."));
+            else if(setup.configuration.resume_mode==="link")asset.append(selected.resume_url?safeLink(selected.resume_url,"Open selected resume link"):el("p",{class:"warning"},"This variant needs an HTTPS link before approval."));
+            else if(selected.file_path)asset.append(el("a",{href:"/api/resumes/"+selected.id+"/pdf",class:"button"},"Download selected PDF"));
+            else asset.append(el("p",{class:"warning"},"This variant needs a PDF before approval."));
+        }
+        variant.addEventListener("change",showAsset);showAsset();section.append(asset);
         section.append(el("div",{class:"actions"},button("Save edits",async()=>{
             const result=await api("/api/review/"+draft.id,"POST",{action:"edit",revision:draft.revision,subject:subject.value,hook:hook.value,body:body.value,resume_variant_id:Number(variant.value)||null});
             draft=result.email;dirty.delete(draft.id);approve.disabled=false;warnings.textContent=draft.qc_warnings||"No deterministic warnings; verify all facts.";status.textContent="Revision "+draft.revision+" · Saved, awaiting approval";toast("Saved. Approval is still required.");
         }),approve,button("Reject",async()=>{await api("/api/review/"+draft.id,"POST",{action:"reject",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Draft rejected.");},"danger")));
         root.append(section);
     }
-    return root;
+    paginate(root,"Review",drafts);return root;
 }
 async function queueView(){
-    const items=await api("/api/queue");
-    return el("div",{},title("Approved queue",button("Send approved batch",()=>queued("/api/send"),"primary")),el("p",{},"Only the approved revision and attachment may send. Caps, suppression and send windows are checked again at delivery."),
+    const items=await api("/api/queue?limit=100&offset="+offsets.Queue);
+    const root=el("div",{},title("Approved queue",button("Send approved batch",()=>queued("/api/send"),"primary")),el("p",{},"Only the approved revision and attachment may send. Caps, suppression and send windows are checked again at delivery."),
         table(["Company","Recipient","Subject","Actions"],items.map(r=>el("tr",{},cell(r.company_name,true),cell(r.contact_email),cell(r.subject,true),cell(button("Return to review",async()=>{await api("/api/review/"+r.id,"POST",{action:"edit",revision:r.revision});await render();}))))));
+    paginate(root,"Queue",items);return root;
 }
 async function trackingView(){
-    const [tracked,due,attempts]=await Promise.all([api("/api/tracking"),api("/api/tracking/due"),api("/api/attempts")]);
+    const [tracked,due,attempts]=await Promise.all([api("/api/tracking?limit=100&offset="+offsets.Tracking),api("/api/tracking/due"),api("/api/attempts")]);
     const root=el("div",{},title("Tracking",button("Refresh",render),button("Check replies",()=>queued("/api/check_replies"))));
     root.append(card("Due for follow-up",table(["Company","Recipient","Actions"],due.map(r=>el("tr",{},cell(r.company_name,true),cell(r.contact_email),cell(button("Draft follow-up",()=>queued("/api/tracking/"+r.id+"/followup"))))))));
     const statuses=["replied","ghosted","bounced","interview_scheduled","interview_completed","offer","no_offer"];
     root.append(table(["Company","Recipient","Status","Sent","Update"],tracked.map(r=>{
         const choice=select(statuses.map(s=>[s,s.replaceAll("_"," ")]),r.status);
-        const action=el("div",{class:"actions"},choice,button("Apply outcome",async()=>{await api("/api/tracking/"+r.id+"/mark","POST",{status:choice.value});await render();}));
-        if(r.status==="failed")action.append(button("Review retry",async()=>{await api("/api/emails/"+r.id+"/retry","POST",{});await render();toast("Returned to review. Approve again after resolving the failure.");}));
+        choice.setAttribute("aria-label","Outcome for email #"+r.id);
+        const action=el("div",{class:"actions"});
+        if(r.sent_at)action.append(choice,button("Apply outcome",async()=>{await api("/api/tracking/"+r.id+"/mark","POST",{status:choice.value});await render();}));
+        if(["failed","canceled"].includes(r.status))action.append(button("Review retry",async()=>{await api("/api/emails/"+r.id+"/retry","POST",{});await render();toast("Returned to review. Approve again after resolving the failure.");}));
         return el("tr",{},cell(r.company_name,true),cell(r.contact_email),cell(r.status),cell(r.sent_at?new Date(r.sent_at).toLocaleString():"Not confirmed sent"),cell(action));
     })));
     for(const attempt of attempts.filter(a=>a.state==="uncertain")){
@@ -158,7 +174,7 @@ async function trackingView(){
             button("Confirm delivered",async()=>{if(confirm("Have you confirmed this exact Message-ID was sent?")){await api("/api/attempts/"+attempt.id+"/reconcile","POST",{accepted:true});await render();}}),
             button("Confirm not sent",async()=>{if(confirm("Have you confirmed this message was NOT submitted? A later retry requires new review.")){await api("/api/attempts/"+attempt.id+"/reconcile","POST",{accepted:false});await render();}})));
     }
-    return root;
+    paginate(root,"Tracking",tracked);return root;
 }
 async function settingsView(){
     const setup=await api("/api/settings");settingsCache=setup;
@@ -187,6 +203,20 @@ async function jobsView(){
     return el("div",{},title("Jobs",button("Refresh",render)),el("p",{class:"notice"},"Operations remain queued until the background worker is running. This view refreshes automatically."),
         jobs.map(j=>card("#"+j.id+" · "+j.kind+" · "+j.status,j.error?el("p",{class:"error"},j.error):null,j.result?.counts?el("p",{},Object.entries(j.result.counts).map(([name,count])=>name+": "+count).join(" · ")):null,el("details",{open:j.status==="failed"?"":undefined},el("summary",{},"Results"),el("pre",{},j.result?JSON.stringify(j.result,null,2):"No result yet")))));
 }
+function paginate(root,name,items){
+    const previous=button("Previous",async()=>{if(dirty.size&&!confirm("Leave without saving your draft edits?"))return;dirty.clear();offsets[name]=Math.max(0,offsets[name]-100);await render();});
+    previous.disabled=offsets[name]===0;
+    const next=button("Next",async()=>{if(dirty.size&&!confirm("Leave without saving your draft edits?"))return;dirty.clear();offsets[name]+=100;await render();});
+    next.disabled=items.length<100;
+    root.append(el("div",{class:"actions"},previous,el("span",{},"Page "+(offsets[name]/100+1)),next));
+}
+async function pollOperation(){
+    if(!loggedIn||!operationId)return;
+    const job=await api("/api/jobs/"+operationId);
+    const counts=job.result?.counts?": "+Object.entries(job.result.counts).map(([key,value])=>key+" "+value).join(", "):"";
+    document.getElementById("operation-status").textContent="Job #"+job.id+" · "+job.status+counts+(job.error?" · "+job.error:"");
+    if(["complete","failed"].includes(job.status))operationId=null;
+}
 const loaders={Dashboard:dashboard,Contacts:contactsView,Companies:companiesView,Review:reviewView,Queue:queueView,Tracking:trackingView,Settings:settingsView,Jobs:jobsView};
 async function loginScreen(){
     loggedIn=false;
@@ -203,5 +233,5 @@ async function boot(){
     await render();
 }
 window.addEventListener("beforeunload",event=>{if(dirty.size){event.preventDefault();event.returnValue="";}});
-setInterval(()=>{if(loggedIn&&view==="Jobs"&&!dirty.size)render();},4000);
+setInterval(()=>{pollOperation().catch(error=>toast(error.message,true));if(loggedIn&&view==="Jobs"&&!dirty.size)render();},4000);
 boot().catch(error=>{content.replaceChildren(el("div",{class:"error",role:"alert"},error.message));content.setAttribute("aria-busy","false");});

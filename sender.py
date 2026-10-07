@@ -68,26 +68,36 @@ def run_send_batch(dry_run=False, force=False, progress=None):
     if not dry_run and queue:
         config.require_gmail_creds()
     server=None
-    submitted=0
+    needs_delay=False
+    projected=[]
+    transport_failed=False
     try:
         for item in queue:
             eid=item["id"]
-            if submitted and not dry_run:
-                time.sleep(random.randint(config.MIN_DELAY_SECONDS,config.MAX_DELAY_SECONDS))
-            if not is_in_send_window():
-                summary.append({"id":eid,"status":"deferred","reason":"Outside send window"})
-                continue
-            if SuppressionRepository.is_suppressed(item["contact_email"]):
-                summary.append({"id":eid,"status":"skipped","reason":"Recipient is suppressed"})
-                continue
             claim=None
             try:
+                if transport_failed:
+                    summary.append({"id":eid,"status":"deferred","reason":"Transport setup failed earlier in this batch"})
+                    continue
+                if not is_in_send_window():
+                    summary.append({"id":eid,"status":"deferred","reason":"Outside send window"})
+                    continue
+                if SuppressionRepository.is_suppressed(item["contact_email"]):
+                    summary.append({"id":eid,"status":"skipped","reason":"Recipient is suppressed"})
+                    continue
                 if dry_run:
                     with get_connection(immediate=True) as conn:
                         row=dict(conn.execute("SELECT * FROM emails WHERE id=?",(eid,)).fetchone())
                         delivery._validate(conn,row)
-                        delivery._quota(conn,row["company_id"])
+                        delivery._quota(conn,row["company_id"],projected=projected)
+                    projected.append(row["company_id"])
                     summary.append({"id":eid,"status":"dry_run","contact":item["contact_email"]})
+                    continue
+                if needs_delay:
+                    time.sleep(random.randint(config.MIN_DELAY_SECONDS,config.MAX_DELAY_SECONDS))
+                    needs_delay=False
+                if not is_in_send_window():
+                    summary.append({"id":eid,"status":"deferred","reason":"Outside send window"})
                     continue
                 claim=delivery.claim(eid)
                 if not claim:
@@ -101,6 +111,7 @@ def run_send_batch(dry_run=False, force=False, progress=None):
                 approved=delivery.prepare(claim["attempt_id"])
                 parent=EmailRepository.get_by_id(item["follow_up_to_email_id"]) if item["follow_up_to_email_id"] else None
                 try:
+                    needs_delay=True
                     msg_id=_send_one(server,approved["recipient"],approved["subject"],approved["body"],
                         company_name=approved["company_name"],in_reply_to=parent["message_id"] if parent else None,
                         attach_mode=approved["attach_mode"],message_id=claim["message_id"],asset=approved["resume"])
@@ -117,9 +128,9 @@ def run_send_batch(dry_run=False, force=False, progress=None):
                 except Exception:
                     delivery.finish(claim["attempt_id"],"uncertain","submission_interrupted")
                     summary.append({"id":eid,"status":"uncertain","reason":"Delivery requires reconciliation; automatic retry disabled"})
+                    _close_transport(server)
                     server=None
                     continue
-                submitted+=1
                 try:
                     EmailRepository.update_sent(eid,msg_id,approved["subject"])
                     summary.append({"id":eid,"status":"sent","contact":approved["recipient"]})
@@ -138,14 +149,18 @@ def run_send_batch(dry_run=False, force=False, progress=None):
                 if claim:
                     delivery.finish(claim["attempt_id"],"failed","transport_setup_failed")
                 summary.append({"id":eid,"status":"failed","reason":"Mail transport unavailable; check settings"})
-                break
+                transport_failed=True
             finally:
                 if progress:
                     progress(summary)
     finally:
-        if server:
-            try:
-                server.quit()
-            except Exception:
-                server.close()
+        _close_transport(server)
     return summary
+
+def _close_transport(server):
+    if server is None: return
+    try:
+        server.quit()
+    except Exception:
+        try: server.close()
+        except Exception: pass

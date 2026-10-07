@@ -52,3 +52,11 @@ def test_sent_outcomes_are_cumulative(contact):
     assert summary["sent"]==summary["replied"]==1
     entry=tracker.stats()["by_variant"][0]
     assert entry["sent"]==entry["replied"]==entry["interviews"]==entry["offers"]==1
+
+def test_persistence_rechecks_reply_after_generation(contact):
+    parent=sent(contact)
+    original=EmailRepository.get_by_id(parent)
+    tracker.mark_replied(parent)
+    with pytest.raises(Conflict,match="replied"):
+        EmailRepository.create(original["company_id"],original["contact_id"],None,"H","Re: S","B",None,parent)
+    assert len(EmailRepository.get_by_contact_id(original["contact_id"]))==1

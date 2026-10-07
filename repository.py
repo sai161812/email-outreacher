@@ -46,9 +46,13 @@ def snapshot(conn, row):
 
 class CompanyRepository:
     @staticmethod
-    def get_all():
+    def get_all(limit=500,offset=0,search=""):
         return rows("""SELECT c.*,(SELECT COUNT(*) FROM contacts ct WHERE ct.company_id=c.id AND ct.archived=0) contact_count
-                       FROM companies c WHERE c.archived=0 ORDER BY c.name""")
+                       FROM companies c WHERE c.archived=0 AND (c.name LIKE ? OR c.domain LIKE ?)
+                       ORDER BY c.name,c.id LIMIT ? OFFSET ?""",(f"%{search}%",f"%{search}%",limit,offset))
+    @staticmethod
+    def find_identity(name,domain=None):
+        return one("SELECT * FROM companies WHERE archived=0 AND (lower(trim(name))=? OR (? IS NOT NULL AND lower(trim(domain))=?)) ORDER BY id LIMIT 1",(name.lower(),domain,domain))
     @staticmethod
     def get_by_id(cid):
         return one("SELECT * FROM companies WHERE id=?", (cid,))
@@ -135,13 +139,15 @@ class EmailRepository:
             root = None
             if follow_up_to_email_id:
                 parent = require_email(conn, follow_up_to_email_id)
-                root = parent["thread_root_id"] or parent["id"]
+                from followups import resolve_root,check
+                root = resolve_root(conn,parent)
+                check(conn,{"company_id":company_id,"contact_id":contact_id,"follow_up_to_email_id":follow_up_to_email_id})
             try:
                 eid = conn.execute("""INSERT INTO emails(company_id,contact_id,resume_variant_id,hook,subject,body,qc_warnings,
                     follow_up_to_email_id,thread_root_id,research_notes,grounding_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                     (company_id,contact_id,resume_variant_id,hook,subject,body,qc_warnings,follow_up_to_email_id,root,research_notes,grounding_json)).lastrowid
             except sqlite3.IntegrityError as exc:
-                raise Conflict("Invalid company, contact or resume relationship") from exc
+                raise Conflict("Invalid relationship or recipient already has active outreach") from exc
             event(conn,eid,"draft_created")
             return eid
     @staticmethod
@@ -150,12 +156,14 @@ class EmailRepository:
         with get_connection(immediate=True) as conn:
             row = require_email(conn,eid)
             check_revision(row,expected_revision)
-            if row["sent_at"] or row["status"] not in {"pending_review","approved","rejected","failed"}:
+            if row["sent_at"] or row["status"] not in {"pending_review","approved","rejected","failed","canceled"}:
                 raise Conflict("This email cannot be edited")
             for name, value in (("subject",subject),("body",body),("hook",hook)):
                 if value is not None:
                     if not isinstance(value,str):
                         raise ValueError(f"{name} must be text")
+                    if len(value)>{"subject":200,"body":10000,"hook":2000}[name]:
+                        raise ValueError(f"{name} exceeds the size limit")
                     row[name] = value.strip()
             if change_resume:
                 row["resume_variant_id"] = resume_variant_id
@@ -212,24 +220,25 @@ class EmailRepository:
     def get_pending_review(limit=100, offset=0):
         return rows(JOINED+"WHERE e.status='pending_review' ORDER BY e.created_at,e.id LIMIT ? OFFSET ?",(limit,offset))
     @staticmethod
-    def get_approved_queue():
-        return rows(JOINED+"""WHERE e.status='approved' ORDER BY
-                    (ct.source='referral') DESC,e.created_at,e.id""")
+    def get_approved_queue(limit=None,offset=0):
+        sql=JOINED+"""WHERE e.status='approved' ORDER BY
+                    (ct.source='referral') DESC,e.created_at,e.id"""
+        return rows(sql+" LIMIT ? OFFSET ?",(limit,offset)) if limit is not None else rows(sql)
     @staticmethod
     def get_all_tracked_emails(limit=100, offset=0):
-        return rows(JOINED+"WHERE e.sent_at IS NOT NULL OR e.status IN ('failed','uncertain','sending') ORDER BY e.updated_at DESC LIMIT ? OFFSET ?",(limit,offset))
+        return rows(JOINED+"WHERE e.sent_at IS NOT NULL OR e.status IN ('failed','uncertain','sending','canceled') ORDER BY e.updated_at DESC,e.id DESC LIMIT ? OFFSET ?",(limit,offset))
     @staticmethod
     def get_sent_candidates_for_replies():
         return rows(JOINED+"WHERE e.sent_at IS NOT NULL AND e.status NOT IN ('bounced','offer','no_offer')")
     @staticmethod
     def count_company_sends_since(company_id, since_iso):
-        return one("SELECT COUNT(*) n FROM emails WHERE company_id=? AND sent_at>?", (company_id,since_iso))["n"]
+        return one("SELECT COUNT(*) n FROM emails WHERE company_id=? AND julianday(sent_at)>julianday(?)", (company_id,since_iso))["n"]
     @staticmethod
     def count_sends_today():
         local = config.now().astimezone(config.TIMEZONE)
         start = local.replace(hour=0,minute=0,second=0,microsecond=0).astimezone(timezone.utc)
         end = (local.replace(hour=0,minute=0,second=0,microsecond=0)+timedelta(days=1)).astimezone(timezone.utc)
-        return one("SELECT COUNT(*) n FROM emails WHERE sent_at>=? AND sent_at<?",(start.isoformat(),end.isoformat()))["n"]
+        return one("SELECT COUNT(*) n FROM emails WHERE julianday(sent_at)>=julianday(?) AND julianday(sent_at)<julianday(?)",(start.isoformat(),end.isoformat()))["n"]
     @staticmethod
     def claim_for_sending(eid):
         from delivery import claim

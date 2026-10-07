@@ -1,4 +1,5 @@
 import re
+import time
 from functools import lru_cache
 EMAIL_REGEX=re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$")
 
@@ -16,8 +17,11 @@ def canonical_email(email):
         raise ValueError("Enter a valid email address")
     return email.strip().lower()
 
-@lru_cache(maxsize=256)
 def has_mx_record(domain):
+    return _has_mx_record(domain.lower(),int(time.monotonic()//300))
+
+@lru_cache(maxsize=256)
+def _has_mx_record(domain,bucket):
     try:
         import dns.resolver
         answers=dns.resolver.resolve(domain,"MX",lifetime=3)

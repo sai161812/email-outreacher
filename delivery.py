@@ -9,19 +9,19 @@ from db import get_connection
 from errors import Conflict
 from repository import require_email, snapshot, timestamp, event, one
 
-def _quota(conn, company_id, exclude=None):
+def _quota(conn, company_id, exclude=None, projected=()):
     local = config.now().astimezone(config.TIMEZONE)
     start = local.replace(hour=0,minute=0,second=0,microsecond=0)
     end = start + timedelta(days=1)
-    accepted_today = conn.execute("SELECT COUNT(*) FROM emails WHERE sent_at>=? AND sent_at<?",
+    accepted_today = conn.execute("SELECT COUNT(*) FROM emails WHERE julianday(sent_at)>=julianday(?) AND julianday(sent_at)<julianday(?)",
         (start.astimezone(timezone.utc).isoformat(),end.astimezone(timezone.utc).isoformat())).fetchone()[0]
-    accepted_company = conn.execute("SELECT COUNT(*) FROM emails WHERE company_id=? AND sent_at>?",
+    accepted_company = conn.execute("SELECT COUNT(*) FROM emails WHERE company_id=? AND julianday(sent_at)>julianday(?)",
         (company_id,(config.now()-timedelta(days=7)).isoformat())).fetchone()[0]
     reserved = conn.execute("""SELECT a.company_id FROM send_attempts a JOIN emails e ON e.id=a.email_id
         WHERE a.state IN ('reserved','submitting','uncertain') AND e.sent_at IS NULL AND (? IS NULL OR a.id<>?)""",(exclude,exclude)).fetchall()
-    if accepted_today + len(reserved) >= config.DAILY_SEND_CAP:
+    if accepted_today + len(reserved) + len(projected) >= config.DAILY_SEND_CAP:
         raise Conflict("Daily send limit reached")
-    if accepted_company + sum(r["company_id"]==company_id for r in reserved) >= config.MAX_PER_COMPANY_PER_WEEK:
+    if accepted_company + sum(r["company_id"]==company_id for r in reserved) + projected.count(company_id) >= config.MAX_PER_COMPANY_PER_WEEK:
         raise Conflict("Company weekly send limit reached")
 
 def _validate(conn,row):

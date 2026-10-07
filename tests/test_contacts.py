@@ -38,3 +38,12 @@ def test_concurrent_contact_insert(contact):
         except Conflict: return None
     with ThreadPoolExecutor(max_workers=2) as pool:
         assert sum(bool(v) for v in pool.map(insert,range(2)))==1
+
+@pytest.mark.parametrize("domain",["bad..test","-bad.test","bad-.test"])
+def test_invalid_domain_labels_rejected(domain):
+    import contacts
+    with pytest.raises(ValueError): contacts.domain_name(domain)
+
+def test_blank_domain_is_optional():
+    import contacts
+    assert contacts.domain_name("   ") is None

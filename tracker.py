@@ -12,6 +12,8 @@ def mark_replied(eid):
     original=EmailRepository.get_by_id(eid)
     if not original:
         raise NotFound("Email not found")
+    if not original["sent_at"]:
+        raise Conflict("Only actually sent emails can have replies")
     root=original["thread_root_id"] or original["id"]
     for item in rows("SELECT * FROM emails WHERE id=? OR thread_root_id=?",(root,root)):
         if item["sent_at"] and item["status"] in {"sent","ghosted"}:

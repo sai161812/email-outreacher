@@ -29,6 +29,8 @@ if RESUME_ATTACH_MODE not in {"attach", "link"}:
     raise ValueError("RESUME_ATTACH_MODE must be attach or link")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview").strip()
+if not GEMINI_MODEL:
+    raise ValueError("GEMINI_MODEL must not be empty")
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS", "").strip()
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "").strip()
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
@@ -70,3 +72,5 @@ def require_gemini_key():
 def require_gmail_creds():
     if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
         raise ValueError("Set GMAIL_ADDRESS and GMAIL_APP_PASSWORD in .env before sending or checking replies")
+    from validate import canonical_email
+    canonical_email(GMAIL_ADDRESS)

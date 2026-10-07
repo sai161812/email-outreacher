@@ -86,3 +86,34 @@ def test_remote_configuration_fails_closed(temp_db,monkeypatch):
     monkeypatch.setattr(config,"OWNER_PASSWORD","")
     with pytest.raises(ValueError,match="requires"):
         create_app()
+
+def test_invalid_profile_does_not_overwrite_context(client):
+    config.CONTEXT_PATH.write_text("Original facts",encoding="utf8")
+    response=post(client,"/api/settings",{"profile":{"full_name":""},"candidate_context":"Replacement"})
+    assert response.status_code==400
+    assert config.CONTEXT_PATH.read_text(encoding="utf8")=="Original facts"
+
+def test_unsent_reply_is_rejected(client,contact):
+    company,person=contact
+    eid=EmailRepository.create(company,person,None,"H","S","B",None)
+    assert post(client,f"/api/tracking/{eid}/mark",{"status":"replied"}).status_code==409
+
+def test_optional_dns_warning(client,contact,monkeypatch):
+    import validate
+    monkeypatch.setattr(validate,"has_mx_record",lambda domain:None)
+    _,person=contact
+    response=post(client,f"/api/contacts/{person}/validate",{})
+    assert response.status_code==200
+    assert "inconclusive" in response.get_json()["warning"]
+
+def test_remote_requires_https(temp_db,monkeypatch):
+    monkeypatch.setenv("ALLOWED_HOSTS","example.test")
+    monkeypatch.setattr(config,"OWNER_PASSWORD","synthetic")
+    monkeypatch.setattr(config,"SECRET_KEY","s"*32)
+    monkeypatch.delenv("COOKIE_SECURE",raising=False)
+    with pytest.raises(ValueError,match="HTTPS"):
+        create_app()
+    monkeypatch.setenv("COOKIE_SECURE","1")
+    client=create_app({"TESTING":True}).test_client()
+    assert client.get("/api/session",base_url="http://example.test").status_code==403
+    assert client.get("/api/session",base_url="https://example.test").status_code==200

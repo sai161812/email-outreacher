@@ -66,7 +66,8 @@ def _generate(prompt,schema,system,search=False):
                     continue
                 raise ProviderError("Draft generation failed. Check the model, credentials and quota, then retry.") from exc
     finally:
-        client.close()
+        try: client.close()
+        except Exception: pass
 
 def _build_user_prompt(company,contact,candidate_context):
     return json.dumps({"company":company,"recipient":{"name":contact.get("name"),"title":contact.get("title")},
@@ -97,7 +98,7 @@ def _reserve(key):
     with get_connection(immediate=True) as conn:
         conn.execute("DELETE FROM settings WHERE key LIKE 'generation:%' AND json_extract(value,'$.expires')<?",(timestamp(),))
         try:
-            conn.execute("INSERT INTO settings(key,value) VALUES (?,?)",(key,json.dumps({"token":token,"expires":(config.now()+timedelta(minutes=10)).isoformat()})))
+            conn.execute("INSERT INTO settings(key,value) VALUES (?,?)",(key,json.dumps({"token":token,"expires":(config.now()+timedelta(seconds=max(600,2*config.PROVIDER_TIMEOUT+60))).isoformat()})))
         except Exception as exc:
             raise Conflict("Draft generation is already running for this recipient") from exc
     return token

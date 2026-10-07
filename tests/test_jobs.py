@@ -26,3 +26,20 @@ def test_failed_jobs_are_visible(temp_db,monkeypatch):
     result=jobs.get(job["id"])
     assert result["status"]=="failed"
     assert "private-secret" not in result["error"]
+
+def test_preview_and_live_send_are_not_coalesced(temp_db):
+    jobs.enqueue("send",{"dry_run":True},"preview-123")
+    with pytest.raises(Conflict,match="different inputs"):
+        jobs.enqueue("send",{},"live-send-123")
+
+def test_restart_fails_running_job_without_redispatch(temp_db,monkeypatch):
+    from db import get_connection
+    job=jobs.enqueue("send",{})
+    with get_connection() as conn:
+        conn.execute("UPDATE jobs SET status='running' WHERE id=?",(job["id"],))
+    dispatch=Mock()
+    monkeypatch.setattr(jobs,"_dispatch",dispatch)
+    jobs.recover()
+    assert jobs.get(job["id"])["status"]=="failed"
+    assert not jobs.process_next()
+    dispatch.assert_not_called()

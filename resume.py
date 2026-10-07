@@ -7,11 +7,14 @@ from repository import ResumeRepository
 from errors import NotFound
 
 def safe_url(value):
-    if not value:
+    if value is None or value=="":
         return None
     if not isinstance(value,str) or len(value)>2000:
         raise ValueError("URL must be text under 2000 characters")
-    parsed = urlparse(value.strip())
+    value=value.strip()
+    if not value: return None
+    if any(c.isspace() or ord(c)<32 for c in value): raise ValueError("URL must not contain whitespace")
+    parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError("Use an HTTPS URL without embedded credentials")
     return value.strip()

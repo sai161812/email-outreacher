@@ -89,3 +89,32 @@ def test_provider_parse_failure_closes_client(ready,monkeypatch):
 def test_followup_prompt_forbids_invention():
     assert "Never invent" in composer.FOLLOW_UP_SYSTEM_PROMPT
     assert "first-year" not in composer.SYSTEM_PROMPT
+
+def test_real_sdk_response_contract_and_retry(ready,monkeypatch):
+    from google.genai import types,errors
+    fake=Mock()
+    response=types.GenerateContentResponse(
+        parsed=composer.EmailDraft(hook="Verified fact",subject="A specific pitch",body="Built a Python tool. Open to a chat?",research_notes="Verify https://example.test"),
+        candidates=[types.Candidate(grounding_metadata=types.GroundingMetadata(web_search_queries=["company"]))])
+    fake.models.generate_content.side_effect=[errors.ServerError(503,{"error":{"message":"synthetic"}}),response]
+    monkeypatch.setattr(config,"GEMINI_API_KEY","synthetic")
+    monkeypatch.setattr(composer.genai,"Client",Mock(return_value=fake))
+    monkeypatch.setattr(composer.time,"sleep",lambda _:None)
+    result=composer._generate("synthetic",composer.EmailDraft,composer.SYSTEM_PROMPT,True)
+    assert result["grounding"][0]["web_search_queries"]==["company"]
+    assert fake.models.generate_content.call_count==2
+    kwargs=fake.models.generate_content.call_args.kwargs
+    assert kwargs["model"]==config.GEMINI_MODEL
+    assert kwargs["config"].tools[0].google_search is not None
+    fake.close.assert_called_once()
+
+def test_provider_auth_error_is_not_retried(ready,monkeypatch):
+    from google.genai import errors
+    fake=Mock()
+    fake.models.generate_content.side_effect=errors.ClientError(401,{"error":{"message":"synthetic"}})
+    monkeypatch.setattr(config,"GEMINI_API_KEY","synthetic")
+    monkeypatch.setattr(composer.genai,"Client",Mock(return_value=fake))
+    with pytest.raises(ProviderError):
+        composer._generate("synthetic",composer.EmailDraft,composer.SYSTEM_PROMPT)
+    assert fake.models.generate_content.call_count==1
+    fake.close.assert_called_once()

@@ -30,3 +30,13 @@ Remaining work includes validated import/API/setup flows, AI generation, replies
 - Added browser setup for companies, contacts, candidate facts, resumes and suppression; safe DOM rendering; explicit dirty-review handling; keyboard dialogs and responsive layouts.
 - Browser verification found and fixed nested-form rendering and a navigation race during writes.
 - Verification: full isolated suite **80 passed**; fresh setup → mocked draft → edit → approval → one mocked SMTP submission → reply outcome; 375/768/1440px screenshots inspected, keyboard focus/Escape checked. No real-provider operations performed.
+
+## Migration recovery and delivery edge cases
+
+- Schema v2 backfills legacy thread roots, retains reviewed v1 approvals, reports invalid threads, permits safe rejection of mismatched legacy rows, and prevents direct duplicate active initial drafts. Concurrent startup rechecks schema ownership.
+- Backup refuses overwrite; interrupted migrations roll back; an SQLite backup is restored and checked in regression tests.
+- Preview and live-send jobs cannot be coalesced together. Preview projects batch quotas without claims; all candidates receive a result after transport failure; interrupted connections close safely.
+- Local midnight, DST and legacy timestamp formats count correctly. Follow-up persistence rechecks eligibility atomically after generation.
+- Profile validation precedes candidate-facts writes; optional bounded/cached DNS checks are available; remote mode requires owner authentication and HTTPS; canceled unsent work can return to review.
+- Lists have UI pagination, review shows the selected delivery asset, and operation status polls real job results.
+- Verification: **117 passed** in the full suite, including real Gemini SDK model/error objects with fake transport, incremental IMAP and UID reset, and the browser workflow. No live Gmail/Gemini requests.

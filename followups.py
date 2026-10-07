@@ -12,6 +12,18 @@ def parsed_time(value):
     parsed = datetime.fromisoformat(value.replace("Z","+00:00"))
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
+def resolve_root(conn,parent):
+    seen=set()
+    current=dict(parent)
+    while True:
+        if current["id"] in seen: raise Conflict("Thread has a cycle; review legacy data")
+        seen.add(current["id"])
+        if not current["follow_up_to_email_id"]: return current["id"]
+        previous=conn.execute("SELECT * FROM emails WHERE id=?",(current["follow_up_to_email_id"],)).fetchone()
+        if not previous or previous["company_id"]!=parent["company_id"] or previous["contact_id"]!=parent["contact_id"]:
+            raise Conflict("Invalid legacy thread relationship")
+        current=dict(previous)
+
 def check(conn, row, for_existing=False):
     parent_id = row.get("follow_up_to_email_id")
     if not parent_id:
@@ -19,7 +31,9 @@ def check(conn, row, for_existing=False):
     parent = conn.execute("SELECT * FROM emails WHERE id=?", (parent_id,)).fetchone()
     if not parent or not parent["sent_at"]:
         raise Conflict("Follow-ups require an actually sent email")
-    root = parent["thread_root_id"] or parent["id"]
+    if parent["company_id"]!=row["company_id"] or parent["contact_id"]!=row["contact_id"]:
+        raise Conflict("Follow-up recipient does not match its parent")
+    root = resolve_root(conn,parent)
     ct = conn.execute("SELECT email,archived FROM contacts WHERE id=?", (row["contact_id"],)).fetchone()
     if not ct or ct["archived"] or conn.execute("SELECT 1 FROM suppressions WHERE lower(trim(email))=?", (ct["email"].strip().lower(),)).fetchone():
         raise Conflict("Recipient is unavailable or suppressed")

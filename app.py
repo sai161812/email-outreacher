@@ -61,7 +61,9 @@ def create_app(overrides=None):
     remote=hosts-{"localhost","127.0.0.1","::1"}
     if (config.OWNER_PASSWORD or remote) and (not config.OWNER_PASSWORD or len(secret)<32):
         raise ValueError("Remote/owner mode requires OWNER_PASSWORD and SECRET_KEY of at least 32 characters")
-    app.config.update(SECRET_KEY=secret or secrets.token_hex(32),MAX_CONTENT_LENGTH=config.MAX_RESUME_BYTES+65536,
+    if remote and os.getenv("COOKIE_SECURE","0")!="1":
+        raise ValueError("Remote mode requires COOKIE_SECURE=1 and an HTTPS reverse proxy")
+    app.config.update(SECRET_KEY=secret or secrets.token_hex(32),MAX_CONTENT_LENGTH=max(config.MAX_RESUME_BYTES,config.MAX_UPLOAD_BYTES)+65536,
                       SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE="Strict",SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE","0")=="1")
     if overrides: app.config.update(overrides)
     db.init_db()
@@ -71,12 +73,13 @@ def create_app(overrides=None):
     def protect():
         host=urlsplit("http://"+request.host).hostname
         if host not in hosts: return jsonify(error="Host is not allowed"),403
+        if host in remote and not request.is_secure: return jsonify(error="HTTPS is required"),403
         session.setdefault("csrf",secrets.token_urlsafe(32))
         if request.method not in {"GET","HEAD","OPTIONS"}:
             origin=request.headers.get("Origin")
             if origin and origin!=request.host_url.rstrip("/"): return jsonify(error="Origin is not allowed"),403
             token=request.headers.get("X-CSRF-Token","")
-            if not hmac.compare_digest(token,session["csrf"]): return jsonify(error="Invalid request token; reload the page"),403
+            if not hmac.compare_digest(token.encode(),session["csrf"].encode()): return jsonify(error="Invalid request token; reload the page"),403
         if owner_hash and request.path.startswith("/api/") and request.path not in {"/api/session","/api/login"} and not session.get("owner"):
             return jsonify(error="Sign in required"),401
     @app.after_request
@@ -126,7 +129,7 @@ def create_app(overrides=None):
     def settings():
         from zoneinfo import ZoneInfo
         readiness={"gemini":bool(config.GEMINI_API_KEY),"gmail":bool(config.GMAIL_ADDRESS and config.GMAIL_APP_PASSWORD),
-                   "profile":bool(candidate_profile.get_profile()),"context":config.CONTEXT_PATH.is_file()}
+                   "profile":bool(candidate_profile.get_profile()),"context":config.CONTEXT_PATH.is_file() and bool(config.CONTEXT_PATH.read_text(encoding="utf8").strip())}
         return jsonify(profile=candidate_profile.get_profile(),candidate_context=config.CONTEXT_PATH.read_text(encoding="utf8") if config.CONTEXT_PATH.is_file() else "",
             resumes=resume.list_resume_variants(),suppressions=SuppressionRepository.get_all(),readiness=readiness,
             configuration={"model":config.GEMINI_MODEL,"timezone":config.TIMEZONE_NAME,"daily_cap":config.DAILY_SEND_CAP,
@@ -136,6 +139,12 @@ def create_app(overrides=None):
     @app.post("/api/settings")
     def save_settings():
         data=payload({"profile","candidate_context"})
+        validated_profile=None
+        if "profile" in data:
+            profile=data["profile"]
+            if not isinstance(profile,dict) or set(profile)-{"full_name","email","phone","linkedin_url","github_url","portfolio_url"} or "full_name" not in profile:
+                raise ValueError("Invalid profile fields")
+            validated_profile=candidate_profile.validate_profile(**profile)
         if "candidate_context" in data:
             context=contacts.text(data["candidate_context"],"candidate_context",True,20000)
             temporary=config.CONTEXT_PATH.with_name(config.CONTEXT_PATH.name+"."+uuid.uuid4().hex+".tmp")
@@ -145,14 +154,11 @@ def create_app(overrides=None):
                 temporary.replace(config.CONTEXT_PATH)
             finally:
                 temporary.unlink(missing_ok=True)
-        if "profile" in data:
-            profile=data["profile"]
-            if not isinstance(profile,dict) or set(profile)-{"full_name","email","phone","linkedin_url","github_url","portfolio_url"} or "full_name" not in profile:
-                raise ValueError("Invalid profile fields")
-            candidate_profile.set_profile(**profile)
+        if validated_profile is not None:
+            candidate_profile.set_profile(**validated_profile)
         return jsonify(success=True)
     @app.get("/api/companies")
-    def companies(): return jsonify(contacts.list_companies())
+    def companies(): return jsonify(contacts.list_companies(*page(),request.args.get("search","")[:200]))
     @app.post("/api/companies")
     def add_company():
         data=payload({"name","domain","job_url","job_text","notes"},{"name"})
@@ -180,6 +186,13 @@ def create_app(overrides=None):
         try: text=raw.decode("utf-8-sig")
         except UnicodeDecodeError as exc: raise ValueError("CSV must use UTF-8 encoding") from exc
         return jsonify(contacts.import_stream(io.StringIO(text,newline="")))
+    @app.post("/api/contacts/<int:cid>/validate")
+    def validate_contact(cid):
+        payload(set())
+        from validate import validate_email
+        contact=contacts.get_contact(cid)
+        valid,warning=validate_email(contact["email"],check_dns=True)
+        return jsonify(valid_syntax=valid,warning=warning,note="DNS results do not prove delivery; imports remain available offline")
     @app.post("/api/resumes")
     def add_resume():
         if request.is_json:
@@ -219,7 +232,7 @@ def create_app(overrides=None):
     @app.get("/api/review")
     def review_list(): return jsonify(reviewer.list_pending(*page()))
     @app.get("/api/queue")
-    def queue(): return jsonify(EmailRepository.get_approved_queue())
+    def queue(): return jsonify(EmailRepository.get_approved_queue(*page()))
     @app.post("/api/review/<int:eid>")
     def review_action(eid):
         data=payload({"action","revision","subject","body","hook","resume_variant_id"},{"action","revision"})
@@ -294,7 +307,7 @@ def create_app(overrides=None):
         payload(set())
         row=EmailRepository.get_by_id(eid)
         if not row: raise NotFound("Email not found")
-        if row["status"]!="failed" or row["sent_at"]: raise Conflict("Only definitely failed unsent messages can be reviewed again")
+        if row["status"] not in {"failed","canceled"} or row["sent_at"]: raise Conflict("Only failed or canceled unsent messages can be reviewed again")
         reviewer.edit(eid,expected_revision=row["revision"])
         return jsonify(success=True)
     @app.patch("/api/contacts/<int:cid>")
@@ -321,7 +334,9 @@ def create_app(overrides=None):
         data=payload({"name","domain","job_url","job_text","notes"})
         contacts.get_company(cid)
         for field in data:
-            if field=="name": data[field]=contacts.normalize_company_name(contacts.text(data[field],field,True,200))
+            if field=="name":
+                data[field]=contacts.normalize_company_name(contacts.text(data[field],field,True,200))
+                if not data[field]: raise ValueError("Company name is required")
             elif field=="domain": data[field]=contacts.domain_name(data[field])
             elif field=="job_url": data[field]=resume.safe_url(data[field])
             else: data[field]=contacts.text(data[field],field,maximum=20000)

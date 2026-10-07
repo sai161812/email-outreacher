@@ -26,7 +26,10 @@ def enqueue(kind,payload,request_key=None):
             return public(existing)
         if kind in {"send","replies"}:
             existing=conn.execute("SELECT * FROM jobs WHERE kind=? AND status IN ('pending','running')",(kind,)).fetchone()
-            if existing: return public(existing)
+            if existing:
+                if existing["payload"]!=body:
+                    raise Conflict("Another operation of this kind is pending with different inputs; wait for its result")
+                return public(existing)
         now=timestamp()
         jid=conn.execute("INSERT INTO jobs(kind,payload,request_key,created_at,updated_at) VALUES (?,?,?,?,?)",(kind,body,key,now,now)).lastrowid
         return public(conn.execute("SELECT * FROM jobs WHERE id=?",(jid,)).fetchone())
