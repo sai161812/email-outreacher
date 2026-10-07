@@ -20,7 +20,8 @@ def safe_url(value):
     return value.strip()
 
 def checked_pdf(path):
-    target = Path(path).resolve()
+    target = Path(path)
+    target = (config.BASE_DIR/target).resolve() if not target.is_absolute() else target.resolve()
     if not target.is_relative_to(config.RESUME_DIR.resolve()):
         raise ValueError("Copy the PDF into RESUME_DIR before registering it")
     if not target.is_file() or target.stat().st_size > config.MAX_RESUME_BYTES:

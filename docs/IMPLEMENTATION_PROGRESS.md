@@ -40,3 +40,11 @@ Remaining work includes validated import/API/setup flows, AI generation, replies
 - Profile validation precedes candidate-facts writes; optional bounded/cached DNS checks are available; remote mode requires owner authentication and HTTPS; canceled unsent work can return to review.
 - Lists have UI pagination, review shows the selected delivery asset, and operation status polls real job results.
 - Verification: **117 passed** in the full suite, including real Gemini SDK model/error objects with fake transport, incremental IMAP and UID reset, and the browser workflow. No live Gmail/Gemini requests.
+
+## Operations and final acceptance gates
+
+- Rewrote PowerShell/POSIX setup, worker, configuration, resume, authentication, uncertainty and recovery instructions. Sample addresses now use reserved example domains.
+- Added manage.py init/check/backup, a committed-source-only release builder, private-file/credential-format/syntax checks and an isolated runtime release smoke script.
+- Added pinned GitHub CI actions for Python 3.12 on Windows/Linux, browser tests, dependency audit and clean release verification, with a weekly advisory scan. Remote run results are recorded separately after push.
+- Contact/company edits now validate send history/in-flight state within their write transaction and record revoked approvals. Company filtering uses its index and joined contact pagination avoids N+1 queries. Malformed CSV tails retain accurate partial-import reports.
+- Verification: **146 passed** (including browser tests); tracked-source checks passed; pip check passed; final dependency scan found **no known vulnerabilities**. Live providers and public HTTPS deployment remain untested.

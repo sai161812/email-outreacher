@@ -33,6 +33,12 @@ def check_revision(row, expected):
     if expected is not None and row["revision"] != expected:
         raise Conflict("Draft changed. Reload and review the latest revision.")
 
+def revoke_approvals(conn,field,record_id):
+    if field not in {"company_id","contact_id"}: raise ValueError("Invalid approval relationship")
+    affected=conn.execute(f"SELECT id FROM emails WHERE {field}=? AND status='approved'",(record_id,)).fetchall()
+    conn.execute(f"UPDATE emails SET status='pending_review',approval_json=NULL,revision=revision+1,updated_at=? WHERE {field}=? AND status='approved'",(timestamp(),record_id))
+    for row in affected: event(conn,row["id"],"approval_revoked",{"changed":field})
+
 def snapshot(conn, row):
     import resume
     ct = conn.execute("SELECT * FROM contacts WHERE id=?", (row["contact_id"],)).fetchone()
@@ -52,7 +58,16 @@ class CompanyRepository:
                        ORDER BY c.name,c.id LIMIT ? OFFSET ?""",(f"%{search}%",f"%{search}%",limit,offset))
     @staticmethod
     def find_identity(name,domain=None):
-        return one("SELECT * FROM companies WHERE archived=0 AND (lower(trim(name))=? OR (? IS NOT NULL AND lower(trim(domain))=?)) ORDER BY id LIMIT 1",(name.lower(),domain,domain))
+        return one("SELECT * FROM companies WHERE archived=0 AND (lower(trim(name))=lower(trim(?)) OR (? IS NOT NULL AND lower(trim(domain))=?)) ORDER BY id LIMIT 1",(name,domain,domain))
+    @staticmethod
+    def update(cid,data):
+        if not data or set(data)-{"name","domain","job_url","job_text","notes"}: raise ValueError("Invalid company changes")
+        with get_connection(immediate=True) as conn:
+            if not conn.execute("SELECT 1 FROM companies WHERE id=? AND archived=0",(cid,)).fetchone(): raise NotFound("Company not found")
+            if conn.execute("SELECT 1 FROM emails WHERE company_id=? AND status IN ('sending','uncertain')",(cid,)).fetchone():
+                raise Conflict("Resolve in-flight delivery before changing this company")
+            conn.execute("UPDATE companies SET "+",".join(f"{k}=?" for k in data)+" WHERE id=?",(*data.values(),cid))
+            revoke_approvals(conn,"company_id",cid)
     @staticmethod
     def get_by_id(cid):
         return one("SELECT * FROM companies WHERE id=?", (cid,))
@@ -71,10 +86,26 @@ class CompanyRepository:
 class ContactRepository:
     @staticmethod
     def get_all_by_company(company_id=None, limit=500, offset=0, search=""):
-        return rows("""SELECT ct.*,c.name company_name FROM contacts ct JOIN companies c ON ct.company_id=c.id
-                    WHERE ct.archived=0 AND c.archived=0 AND (? IS NULL OR ct.company_id=?)
-                    AND (ct.name LIKE ? OR ct.email LIKE ? OR c.name LIKE ?) ORDER BY c.name,ct.email LIMIT ? OFFSET ?""",
-                    (company_id,company_id,*([f"%{search}%"]*3),limit,offset))
+        sql="""SELECT ct.*,c.name company_name FROM contacts ct JOIN companies c ON ct.company_id=c.id
+               WHERE ct.archived=0 AND c.archived=0"""
+        params=[]
+        if company_id is not None:
+            sql+=" AND ct.company_id=?";params.append(company_id)
+        if search:
+            sql+=" AND (ct.name LIKE ? OR ct.email LIKE ? OR c.name LIKE ?)";params.extend([f"%{search}%"]*3)
+        return rows(sql+" ORDER BY c.name,ct.email LIMIT ? OFFSET ?",(*params,limit,offset))
+    @staticmethod
+    def update(cid,data):
+        if not data or set(data)-{"email","name","title","source","archived"}: raise ValueError("Invalid contact changes")
+        with get_connection(immediate=True) as conn:
+            original=conn.execute("SELECT * FROM contacts WHERE id=? AND archived=0",(cid,)).fetchone()
+            if not original: raise NotFound("Contact not found")
+            if conn.execute("SELECT 1 FROM emails WHERE contact_id=? AND status IN ('sending','uncertain')",(cid,)).fetchone():
+                raise Conflict("Resolve in-flight delivery before changing this contact")
+            if "email" in data and data["email"]!=original["email"] and conn.execute("SELECT 1 FROM emails WHERE contact_id=? AND sent_at IS NOT NULL",(cid,)).fetchone():
+                raise Conflict("Create a new contact to change an address with send history")
+            conn.execute("UPDATE contacts SET "+",".join(f"{k}=?" for k in data)+" WHERE id=?",(*data.values(),cid))
+            revoke_approvals(conn,"contact_id",cid)
     @staticmethod
     def get_by_id(cid):
         return one("SELECT * FROM contacts WHERE id=?", (cid,))

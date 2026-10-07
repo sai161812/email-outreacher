@@ -47,7 +47,7 @@ def add_contact(company_id,email,name=None,title=None,source=None):
     return ContactRepository.create(company_id,validate.canonical_email(email),text(name,"name",maximum=200),text(title,"title",maximum=200),text(source,"source",maximum=500))
 
 def find_company_by_name(name,domain=None):
-    target=normalize_company_name(name).casefold()
+    target=normalize_company_name(name)
     normalized=domain_name(domain)
     return CompanyRepository.find_identity(target,normalized)
 
@@ -58,7 +58,8 @@ def import_csv(file_path):
 def import_stream(source):
     summary={"companies_created":0,"contacts_created":0,"duplicates_skipped":0,"errors":[]}
     reader=csv.DictReader(source,strict=True)
-    headers=reader.fieldnames
+    try: headers=reader.fieldnames
+    except csv.Error as exc: raise ValueError("Malformed CSV header") from exc
     if not headers or len(headers)!=len(set(headers)) or any(c not in headers for c in CSV_REQUIRED_COLUMNS):
         raise ValueError("CSV needs unique headers including company_name and contact_email")
     if any(h not in CSV_REQUIRED_COLUMNS+CSV_OPTIONAL_COLUMNS for h in headers):
@@ -66,7 +67,8 @@ def import_stream(source):
     try:
         for number,row in enumerate(reader,start=2):
             if number>10001:
-                raise ValueError("CSV is limited to 10000 rows")
+                summary["errors"].append({"row":number,"error":"CSV is limited to 10000 rows; remaining rows were not imported"})
+                break
             try:
                 if None in row or any(value is None for value in row.values()):
                     raise ValueError("Row has a different number of fields than the header")
@@ -101,8 +103,8 @@ def import_stream(source):
                     summary["duplicates_skipped"]+=1
             except (ValueError,NotFound) as exc:
                 summary["errors"].append({"row":number,"error":str(exc)})
-    except csv.Error as exc:
-        raise ValueError("Malformed CSV") from exc
+    except csv.Error:
+        summary["errors"].append({"row":reader.line_num,"error":"Malformed CSV; remaining rows were not imported"})
     return summary
 
 def list_companies(limit=500,offset=0,search=""):

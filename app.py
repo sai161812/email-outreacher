@@ -317,17 +317,13 @@ def create_app(overrides=None):
         if "email" in data:
             from validate import canonical_email
             data["email"]=canonical_email(data["email"])
-            if data["email"]!=original["email"] and any(e["sent_at"] for e in EmailRepository.get_by_contact_id(cid)):
-                raise Conflict("Create a new contact to change an address with send history")
         for field in ("name","title","source"):
             if field in data: data[field]=contacts.text(data[field],field,maximum=500)
         if "archived" in data:
             if type(data["archived"]) is not bool: raise ValueError("archived must be boolean")
             data["archived"]=int(data["archived"])
         if not data: raise ValueError("No changes supplied")
-        with db.get_connection(immediate=True) as conn:
-            conn.execute("UPDATE contacts SET "+",".join(f"{k}=?" for k in data)+" WHERE id=?",(*data.values(),cid))
-            conn.execute("UPDATE emails SET status='pending_review',approval_json=NULL,revision=revision+1 WHERE contact_id=? AND status='approved'",(cid,))
+        ContactRepository.update(cid,data)
         return jsonify(success=True)
     @app.patch("/api/companies/<int:cid>")
     def edit_company(cid):
@@ -341,9 +337,7 @@ def create_app(overrides=None):
             elif field=="job_url": data[field]=resume.safe_url(data[field])
             else: data[field]=contacts.text(data[field],field,maximum=20000)
         if not data: raise ValueError("No changes supplied")
-        with db.get_connection(immediate=True) as conn:
-            conn.execute("UPDATE companies SET "+",".join(f"{k}=?" for k in data)+" WHERE id=?",(*data.values(),cid))
-            conn.execute("UPDATE emails SET status='pending_review',approval_json=NULL,revision=revision+1 WHERE company_id=? AND status='approved'",(cid,))
+        CompanyRepository.update(cid,data)
         return jsonify(success=True)
     return app
 

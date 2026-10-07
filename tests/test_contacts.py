@@ -47,3 +47,14 @@ def test_invalid_domain_labels_rejected(domain):
 def test_blank_domain_is_optional():
     import contacts
     assert contacts.domain_name("   ") is None
+
+def test_malformed_tail_reports_committed_rows(temp_db):
+    report=contacts.import_stream(io.StringIO('company_name,contact_email\nValid,valid@example.test\n"unfinished'))
+    assert report["contacts_created"]==1
+    assert len(contacts.list_contacts())==1
+    assert "Malformed" in report["errors"][0]["error"]
+
+def test_unicode_company_identity_reimport(temp_db):
+    data="company_name,contact_email\nStraße,p@example.test\n"
+    assert contacts.import_stream(io.StringIO(data))["contacts_created"]==1
+    assert contacts.import_stream(io.StringIO(data))["duplicates_skipped"]==1

@@ -117,3 +117,33 @@ def test_remote_requires_https(temp_db,monkeypatch):
     client=create_app({"TESTING":True}).test_client()
     assert client.get("/api/session",base_url="http://example.test").status_code==403
     assert client.get("/api/session",base_url="https://example.test").status_code==200
+
+@pytest.mark.parametrize("path",[
+    "/api/settings","/api/companies","/api/contacts","/api/suppressions",
+    "/api/review/9999","/api/tracking/9999/mark","/api/compose",
+    "/api/tracking/9999/followup","/api/send","/api/check_replies",
+    "/api/attempts/9999/reconcile","/api/emails/9999/retry","/api/resumes"])
+def test_mutation_null_body_has_safe_json_error(client,path):
+    response=post(client,path,None)
+    assert response.status_code==400
+    assert response.get_json()["error"]
+
+def test_contact_edit_is_blocked_while_delivery_in_flight(client,contact):
+    import reviewer,delivery
+    company,person=contact
+    eid=EmailRepository.create(company,person,None,"H","S","B",None)
+    reviewer.approve(eid)
+    delivery.claim(eid)
+    response=post(client,f"/api/contacts/{person}",{"email":"changed@example.test"},method="patch")
+    assert response.status_code==409
+    response=post(client,f"/api/companies/{company}",{"name":"Changed"},method="patch")
+    assert response.status_code==409
+
+def test_contact_edit_revokes_exact_approval(client,contact):
+    import reviewer
+    company,person=contact
+    eid=EmailRepository.create(company,person,None,"H","S","B",None)
+    reviewer.approve(eid)
+    assert post(client,f"/api/contacts/{person}",{"name":"New name"},method="patch").status_code==200
+    row=EmailRepository.get_by_id(eid)
+    assert row["status"]=="pending_review" and row["revision"]==2
