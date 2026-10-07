@@ -52,17 +52,22 @@ def check(conn, row, for_existing=False):
     if any(e["status"] in {"pending_review","approved","sending","uncertain"} for e in followups):
         raise Conflict("A follow-up already exists")
 
-def due():
+def due(limit=100,offset=0):
     from db import get_connection
     with get_connection() as conn:
-        candidates = [dict(r) for r in conn.execute(JOINED+"""WHERE e.sent_at IS NOT NULL
-            AND e.follow_up_to_email_id IS NULL AND ct.archived=0 AND c.archived=0 ORDER BY e.sent_at LIMIT 1000""")]
         result=[]
-        for original in candidates:
-            proposed={**original,"follow_up_to_email_id":original["id"]}
-            try:
-                check(conn,proposed)
-                result.append(original)
-            except Conflict:
-                continue
+        cursor=0;eligible=0
+        while len(result)<limit:
+            candidates=[dict(r) for r in conn.execute(JOINED+"""WHERE e.sent_at IS NOT NULL
+                AND e.status IN ('sent','ghosted') AND e.follow_up_to_email_id IS NULL
+                AND ct.archived=0 AND c.archived=0 AND e.id>? ORDER BY e.id LIMIT 500""",(cursor,))]
+            if not candidates: break
+            for original in candidates:
+                cursor=original["id"]
+                proposed={**original,"follow_up_to_email_id":original["id"]}
+                try: check(conn,proposed)
+                except Conflict: continue
+                if eligible>=offset: result.append(original)
+                eligible+=1
+                if len(result)>=limit: break
         return result

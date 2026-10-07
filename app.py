@@ -133,8 +133,10 @@ def create_app(overrides=None):
         return jsonify(profile=candidate_profile.get_profile(),candidate_context=config.CONTEXT_PATH.read_text(encoding="utf8") if config.CONTEXT_PATH.is_file() else "",
             resumes=resume.list_resume_variants(),suppressions=SuppressionRepository.get_all(),readiness=readiness,
             configuration={"model":config.GEMINI_MODEL,"timezone":config.TIMEZONE_NAME,"daily_cap":config.DAILY_SEND_CAP,
-                           "company_weekly_cap":config.MAX_PER_COMPANY_PER_WEEK,"resume_mode":config.RESUME_ATTACH_MODE},
+                           "company_weekly_cap":config.MAX_PER_COMPANY_PER_WEEK,"resume_mode":config.RESUME_ATTACH_MODE,
+                           "daily_remaining":max(0,config.DAILY_SEND_CAP-EmailRepository.count_sends_today()-rows("SELECT COUNT(*) n FROM send_attempts a JOIN emails e ON e.id=a.email_id WHERE a.state IN ('reserved','submitting','uncertain') AND e.sent_at IS NULL")[0]["n"])},
             migration_reports=rows("SELECT * FROM migration_reports WHERE count>0"),
+            duplicate_contacts=ContactRepository.duplicate_groups(),
             worker=rows("SELECT value FROM settings WHERE key='worker_heartbeat'"))
     @app.post("/api/settings")
     def save_settings():
@@ -251,7 +253,7 @@ def create_app(overrides=None):
     @app.get("/api/tracking")
     def tracking(): return jsonify(EmailRepository.get_all_tracked_emails(*page()))
     @app.get("/api/tracking/due")
-    def due(): return jsonify(tracker.due_for_follow_up())
+    def due(): return jsonify(tracker.due_for_follow_up(*page()))
     @app.post("/api/tracking/<int:eid>/mark")
     def mark(eid):
         data=payload({"status"},{"status"})

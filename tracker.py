@@ -28,7 +28,7 @@ def mark_interview_scheduled(eid): return _set_status(eid,"interview_scheduled")
 def mark_interview_completed(eid): return _set_status(eid,"interview_completed")
 def mark_offer(eid): return _set_status(eid,"offer")
 def mark_no_offer(eid): return _set_status(eid,"no_offer")
-def due_for_follow_up(): return followups.due()
+def due_for_follow_up(limit=100,offset=0): return followups.due(limit,offset)
 
 def pipeline_summary():
     result={r["status"]:r["n"] for r in rows("SELECT status,COUNT(*) n FROM emails GROUP BY status")}

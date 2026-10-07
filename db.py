@@ -88,7 +88,7 @@ def backup_database(destination=None):
     if not config.DB_PATH.is_file():
         raise ValueError("Database does not exist; initialize it before backing up")
     target.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(config.DB_PATH) as source, sqlite3.connect(target) as copy:
+    with sqlite3.connect(config.DB_PATH.resolve().as_uri()+"?mode=ro",uri=True) as source, sqlite3.connect(target) as copy:
         source.backup(copy)
     return target
 

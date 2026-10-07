@@ -105,7 +105,18 @@ class ContactRepository:
             if "email" in data and data["email"]!=original["email"] and conn.execute("SELECT 1 FROM emails WHERE contact_id=? AND sent_at IS NOT NULL",(cid,)).fetchone():
                 raise Conflict("Create a new contact to change an address with send history")
             conn.execute("UPDATE contacts SET "+",".join(f"{k}=?" for k in data)+" WHERE id=?",(*data.values(),cid))
-            revoke_approvals(conn,"contact_id",cid)
+            if data.get("archived"):
+                affected=conn.execute("SELECT id FROM emails WHERE contact_id=? AND status IN ('pending_review','approved')",(cid,)).fetchall()
+                conn.execute("UPDATE emails SET status='canceled',approval_json=NULL,revision=revision+1,updated_at=? WHERE contact_id=? AND status IN ('pending_review','approved')",(timestamp(),cid))
+                for row in affected: event(conn,row["id"],"canceled",{"reason":"contact_archived"})
+            else:
+                revoke_approvals(conn,"contact_id",cid)
+    @staticmethod
+    def duplicate_groups():
+        return rows("""SELECT ct.company_id,c.name company_name,lower(trim(ct.email)) email,
+            COUNT(*) count,group_concat(ct.id) contact_ids FROM contacts ct JOIN companies c ON c.id=ct.company_id
+            WHERE ct.archived=0 GROUP BY ct.company_id,lower(trim(ct.email)) HAVING COUNT(*)>1
+            ORDER BY c.name,lower(trim(ct.email)) LIMIT 500""")
     @staticmethod
     def get_by_id(cid):
         return one("SELECT * FROM contacts WHERE id=?", (cid,))

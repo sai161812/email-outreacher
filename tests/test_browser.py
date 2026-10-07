@@ -57,9 +57,16 @@ def test_full_setup_review_send_workflow(browser_app):
     open_view(page,"Settings")
     page.get_by_label("full name",exact=True).fill("Candidate")
     page.get_by_label("Candidate facts",exact=False).fill("Built a Python dashboard.")
-    page.get_by_role("button",name="Save profile and facts").click()
-    expect(page.get_by_label("full name",exact=True)).to_have_value("Candidate")
+    held=[]
+    page.route("**/api/settings",lambda route:held.append(route) if route.request.method=="POST" else route.continue_())
+    with page.expect_request(lambda request:request.url.endswith("/api/settings") and request.method=="POST"):
+        page.get_by_role("button",name="Save profile and facts").click()
+    # Typing into another setup form during a slow save must survive completion.
     page.get_by_label("Resume name",exact=True).fill("Python CV")
+    assert len(held)==1
+    held[0].continue_()
+    expect(page.get_by_text("Profile and facts saved.",exact=True)).to_be_visible()
+    expect(page.get_by_label("Resume name",exact=True)).to_have_value("Python CV")
     page.get_by_label("Matching keywords",exact=False).fill("python")
     page.get_by_label("PDF",exact=True).set_input_files({"name":"cv.pdf","mimeType":"application/pdf","buffer":b"%PDF-1.4\nsynthetic fixture"})
     page.get_by_role("button",name="Register resume").click()

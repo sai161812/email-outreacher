@@ -48,3 +48,10 @@ Remaining work includes validated import/API/setup flows, AI generation, replies
 - Added pinned GitHub CI actions for Python 3.12 on Windows/Linux, browser tests, dependency audit and clean release verification, with a weekly advisory scan. Remote run results are recorded separately after push.
 - Contact/company edits now validate send history/in-flight state within their write transaction and record revoked approvals. Company filtering uses its index and joined contact pagination avoids N+1 queries. Malformed CSV tails retain accurate partial-import reports.
 - Verification: **146 passed** (including browser tests); tracked-source checks passed; pip check passed; final dependency scan found **no known vulnerabilities**. Live providers and public HTTPS deployment remain untested.
+
+## Legacy-data review and CI timing repair
+
+- A read-only SQLite backup of the actual legacy database passed integrity/FK checks. Migration on a separate protected snapshot preserved email IDs/content/send timestamps and reported three duplicate-contact groups. The original database content hash was unchanged. Private snapshots stay ignored; no contact details are published here.
+- Settings now offers explicit duplicate-contact review, remaining daily capacity and worker heartbeat. Archiving cancels unsubmitted work and preserves history. Follow-up listing pages past closed historical records.
+- Initial Linux CI found a slow-response setup race: profile-save completion refreshed Settings and erased a concurrently entered resume name. Profile readiness now updates in place. A browser test deliberately holds the save response while typing the resume name and verifies preservation.
+- Verification: full local suite **148 passed** before the CI timing patch; targeted browser suite **4 passed** with the delayed-response regression; JavaScript syntax passed. Cross-platform rerun pending for this source revision.

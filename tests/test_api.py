@@ -147,3 +147,12 @@ def test_contact_edit_revokes_exact_approval(client,contact):
     assert post(client,f"/api/contacts/{person}",{"name":"New name"},method="patch").status_code==200
     row=EmailRepository.get_by_id(eid)
     assert row["status"]=="pending_review" and row["revision"]==2
+
+def test_archiving_contact_cancels_unsubmitted_work(client,contact):
+    import reviewer
+    company,person=contact
+    eid=EmailRepository.create(company,person,None,"H","S","B",None)
+    reviewer.approve(eid)
+    assert post(client,f"/api/contacts/{person}",{"archived":True},method="patch").status_code==200
+    assert EmailRepository.get_by_id(eid)["status"]=="canceled"
+    assert client.get("/api/queue").get_json()==[]

@@ -60,3 +60,14 @@ def test_persistence_rechecks_reply_after_generation(contact):
     with pytest.raises(Conflict,match="replied"):
         EmailRepository.create(original["company_id"],original["contact_id"],None,"H","Re: S","B",None,parent)
     assert len(EmailRepository.get_by_contact_id(original["contact_id"]))==1
+
+def test_due_listing_paginates_past_closed_history(contact):
+    from repository import ContactRepository
+    company,_=contact
+    stamp=(config.now()-timedelta(days=20)).isoformat()
+    with get_connection() as conn:
+        conn.executemany("INSERT INTO contacts(id,company_id,email) VALUES (?,?,?)",[(100+i,company,f"old{i}@example.test") for i in range(1001)])
+        conn.executemany("INSERT INTO emails(company_id,contact_id,status,sent_at,subject,body) VALUES (?,?,'replied',?,'S','B')",[(company,100+i,stamp) for i in range(1001)])
+    newest=sent(contact)
+    assert [r["id"] for r in followups.due(limit=10)]==[newest]
+    assert followups.due(limit=10,offset=1)==[]

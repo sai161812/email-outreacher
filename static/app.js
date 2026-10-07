@@ -73,7 +73,7 @@ async function navigate(next){
 async function render(){
     const serial=++epoch;content.setAttribute("aria-busy","true");
     try{const node=await loaders[view]();if(serial===epoch)content.replaceChildren(node);}
-    catch(error){if(serial===epoch)content.replaceChildren(el("div",{class:"error",role:"alert"},error.message),button("Retry",render));}
+    catch(error){if(serial===epoch&&loggedIn)content.replaceChildren(el("div",{class:"error",role:"alert"},error.message),button("Retry",render));}
     finally{if(serial===epoch)content.setAttribute("aria-busy","false");}
 }
 async function dashboard(){
@@ -81,6 +81,7 @@ async function dashboard(){
     const root=el("div",{},title("Dashboard",button("Refresh",render),button("Preview send batch",()=>queued("/api/send",{dry_run:true})),button("Send approved batch",()=>queued("/api/send"),"primary"),button("Check replies",()=>queued("/api/check_replies"))));
     const missing=Object.entries(setup.readiness).filter(([,ready])=>!ready).map(([key])=>key);
     if(missing.length)root.append(el("p",{class:"notice"},"Setup needed: "+missing.join(", ")+". Open Settings before drafting or sending."));
+    root.append(el("p",{class:"notice"},"Daily remaining capacity: "+setup.configuration.daily_remaining+" of "+setup.configuration.daily_cap+". Outstanding uncertain attempts consume capacity."));
     root.append(el("div",{class:"grid"},["pending_review","approved","sent","replied"].map(key=>card(key.replaceAll("_"," "),el("div",{class:"metric"},data.summary[key]||0)))));
     root.append(card("Resume performance",el("p",{class:"muted"},"Rates count sent messages, including follow-ups."),table(["Resume","Sent","Replies","Interviews","Offers","Reply rate"],data.stats.by_variant.map(v=>el("tr",{},[v.name,v.sent,v.replied,v.interviews,v.offers,v.reply_rate+"%"].map(value=>cell(value)))))));
     return root;
@@ -107,7 +108,7 @@ function contactForm(companies,person=null){
 }
 async function companiesView(){
     const companies=await api("/api/companies?limit=100&offset="+offsets.Companies);
-    const root=el("div",{},title("Companies",button("Add company",()=>companyForm())),table(["Company","Domain","Contacts","Actions"],companies.map(c=>el("tr",{},cell(c.name,true),cell(c.domain||"—"),cell(c.contact_count),cell(button("Edit",()=>companyForm(c)))))));
+    const root=el("div",{},title("Companies",button("Add company",()=>companyForm())),table(["Company","Domain","Contacts","Actions"],companies.map(c=>el("tr",{},cell(c.name,true),cell(c.domain||"—"),cell(c.contact_count),cell(el("div",{class:"actions"},button("Edit",()=>companyForm(c)),button("Add contact",()=>contactForm([c]))))))));
     paginate(root,"Companies",companies);return root;
 }
 function companyForm(company=null){
@@ -129,7 +130,7 @@ async function reviewView(){
         const section=card(draft.company_name+" · "+draft.contact_email,status,field("Subject",subject),field("Research hook",hook),field("Body",body),field("Resume choice",variant),warnings);
         const mark=()=>{dirty.add(draft.id);approve.disabled=true;status.textContent="Unsaved edits — save before approving";};
         for(const node of [subject,hook,body,variant])node.addEventListener("input",mark);
-        section.append(el("details",{},el("summary",{},"Research notes and sources"),el("pre",{},draft.research_notes||"No source evidence saved; verify company claims independently."),
+        section.append(el("details",{},el("summary",{},"Research notes and sources"),el("p",{class:"warning"},"AI-written notes and URLs require independent verification."),el("pre",{},draft.research_notes||"No source evidence saved; verify company claims independently."),
             el("ul",{class:"sources"},[...new Set((draft.research_notes||"").match(/https:\/\/[^\s<>]+/g)||[])].map(url=>el("li",{},safeLink(url,url)))),
             el("pre",{},draft.grounding_json||"")));
         const asset=el("div",{});
@@ -178,12 +179,13 @@ async function trackingView(){
 }
 async function settingsView(){
     const setup=await api("/api/settings");settingsCache=setup;
-    const root=el("div",{},title("Settings"),card("Readiness",el("p",{},Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"ready":"needed")).join(" · ")),
+    const readiness=el("p",{},Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"ready":"needed")).join(" · "));
+    const root=el("div",{},title("Settings"),card("Readiness",readiness,
         el("p",{class:"muted"},"Model: "+setup.configuration.model+" · Timezone: "+setup.configuration.timezone+" · Resume mode: "+setup.configuration.resume_mode)));
     const fields={};for(const key of ["full_name","email","phone","linkedin_url","github_url","portfolio_url"])fields[key]=input(setup.profile?.[key],key.includes("url")?"url":key==="email"?"email":"text");
     const context=el("textarea",{value:setup.candidate_context,rows:6});
     root.append(card("Profile and verified candidate facts",Object.entries(fields).map(([key,node])=>field(key.replaceAll("_"," "),node)),field("Candidate facts — include only truthful skills and achievements",context),
-        button("Save profile and facts",async()=>{await api("/api/settings","POST",{profile:Object.fromEntries(Object.entries(fields).map(([key,node])=>[key,node.value])),candidate_context:context.value});toast("Profile and facts saved.");await render();},"primary")));
+        button("Save profile and facts",async()=>{await api("/api/settings","POST",{profile:Object.fromEntries(Object.entries(fields).map(([key,node])=>[key,node.value])),candidate_context:context.value});setup.readiness.profile=true;setup.readiness.context=!!context.value.trim();readiness.textContent=Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"ready":"needed")).join(" · ");toast("Profile and facts saved.");},"primary")));
     const name=input(),keywords=input(),url=input("","url"),file=el("input",{type:"file",accept:".pdf"});
     root.append(card("Resume variants",el("p",{},"Upload PDFs you wrote, or register a public HTTPS link. Delivery uses the configured mode."),
         field("Resume name",name),field("Matching keywords, separated by commas",keywords),field("PDF",file),field("HTTPS resume link (optional for attachments)",url),
@@ -195,6 +197,11 @@ async function settingsView(){
     const address=input("","email"),reason=input();
     root.append(card("Suppressions",field("Email to suppress",address),field("Reason",reason),button("Suppress address",async()=>{await api("/api/suppressions","POST",{email:address.value,reason:reason.value});await render();}),
         table(["Address","Reason","Actions"],setup.suppressions.map(r=>el("tr",{},cell(r.email),cell(r.reason,true),cell(button("Remove suppression",async()=>{await api("/api/suppressions","DELETE",{email:r.email});await render();})))))));
+    if(setup.duplicate_contacts.length)root.append(card("Duplicate contacts to review",
+        el("p",{},"Keep the record you intend to use and archive redundant contacts after checking their history. Archiving preserves sent history and cancels unsubmitted drafts."),
+        table(["Company","Address","Records","Review"],setup.duplicate_contacts.map(group=>el("tr",{},cell(group.company_name,true),cell(group.email),cell(group.contact_ids),cell(button("Review contacts",async()=>{contactSearch=group.email;contactsOffset=0;await navigate("Contacts");})))))));
+    if(setup.worker.length)root.append(el("p",{class:"muted"},"Worker last seen: "+new Date(setup.worker[0].value).toLocaleString()));
+    else root.append(el("p",{class:"warning"},"Worker has not started for this database."));
     if(setup.migration_reports.length)root.append(card("Legacy data needs review",el("pre",{},JSON.stringify(setup.migration_reports,null,2)),el("p",{},"Existing records were preserved. Resolve duplicate identities or mismatched relationships before reusing them.")));
     return root;
 }
