@@ -1,0 +1,406 @@
+{
+  "baseline": "ad87f08667997683a876ad19c112a191f83f96ac",
+  "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+  "network": "blocked by probe",
+  "results": [
+    {
+      "probe": "fresh_flask_import_stats",
+      "result": {
+        "status": 500
+      }
+    },
+    {
+      "probe": "schema_init_twice",
+      "result": "completed"
+    },
+    {
+      "probe": "save_edits_status",
+      "result": "approved"
+    },
+    {
+      "probe": "reapprove_sent_status",
+      "result": "approved"
+    },
+    {
+      "probe": "unknown_review_action",
+      "result": {
+        "status": 200,
+        "body": {
+          "success": true
+        }
+      }
+    },
+    {
+      "probe": "missing_review_target",
+      "result": {
+        "status": 200,
+        "body": {
+          "success": true
+        }
+      }
+    },
+    {
+      "probe": "unsent_marked_offer",
+      "result": {
+        "status": "offer",
+        "sent_at": null
+      }
+    },
+    {
+      "probe": "missing_company_name",
+      "result": {
+        "status": 500
+      }
+    },
+    {
+      "probe": "blank_company_name",
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "probe": "invalid_contact_email",
+      "result": {
+        "status": 500
+      }
+    },
+    {
+      "probe": "null_review_json",
+      "result": {
+        "status": 500
+      }
+    },
+    {
+      "probe": "invalid_tracking_action",
+      "result": {
+        "status": 200,
+        "body": {
+          "success": true
+        }
+      }
+    },
+    {
+      "probe": "limits_after_reply",
+      "result": {
+        "before": [
+          1,
+          1
+        ],
+        "after": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "probe": "suppression_case_variants",
+      "result": false
+    },
+    {
+      "probe": "whitespace_contact_storage",
+      "result": {
+        "email": "  spaced@example.test  "
+      }
+    },
+    {
+      "probe": "duplicate_contacts",
+      "result": {
+        "first": 3,
+        "second": 4
+      }
+    },
+    {
+      "probe": "email_syntax_dot_errors",
+      "result": {
+        ".person@example.test": true,
+        "person..name@example.test": true,
+        "person.@example.test": true
+      }
+    },
+    {
+      "probe": "reimport_same_csv",
+      "result": {
+        "companies_created": 0,
+        "contacts_created": 1,
+        "errors": []
+      }
+    },
+    {
+      "probe": "empty_csv",
+      "exception": "TypeError",
+      "message": "argument of type 'NoneType' is not iterable"
+    },
+    {
+      "probe": "mismatched_company_contact",
+      "result": {
+        "email_company": 2,
+        "contact_company": 1
+      }
+    },
+    {
+      "probe": "research_notes_persisted",
+      "result": false
+    },
+    {
+      "probe": "compose_assigned_resume",
+      "exception": "AttributeError",
+      "message": "module 'resume' has no attribute 'get_variant'"
+    },
+    {
+      "probe": "missing_resume_lookup",
+      "result": false
+    },
+    {
+      "probe": "null_job_text",
+      "exception": "AttributeError",
+      "message": "'NoneType' object has no attribute 'lower'"
+    },
+    {
+      "probe": "qc_empty_content",
+      "result": {
+        "subject": [],
+        "body": []
+      }
+    },
+    {
+      "probe": "qc_followup_length",
+      "result": [
+        "Body length (12 words) outside 50-90 range"
+      ]
+    },
+    {
+      "probe": "parse_failure_can_be_approved",
+      "result": {
+        "status": "approved",
+        "hook": "PARSE_ERROR"
+      }
+    },
+    {
+      "probe": "whitespace_contact_name_composition",
+      "exception": "IndexError",
+      "message": "list index out of range"
+    },
+    {
+      "probe": "suppressed_queue_consumes_company_quota",
+      "result": [
+        {
+          "id": 100,
+          "status": "skipped",
+          "reason": "suppressed"
+        },
+        {
+          "id": 101,
+          "status": "dry_run",
+          "contact": "person1@example.test"
+        }
+      ]
+    },
+    {
+      "probe": "send_assigned_resume",
+      "result": [
+        {
+          "id": 7,
+          "status": "failed",
+          "reason": "'sqlite3.Row' object has no attribute 'get'"
+        }
+      ]
+    },
+    {
+      "probe": "send_window_default",
+      "result": [
+        {
+          "id": 8,
+          "status": "dry_run",
+          "contact": "person@example.test"
+        }
+      ]
+    },
+    {
+      "probe": "atomic_claim_available",
+      "result": false
+    },
+    {
+      "probe": "approved_queue_company_name",
+      "result": false
+    },
+    {
+      "probe": "missing_attachment_still_sends",
+      "result": 1
+    },
+    {
+      "probe": "smtp_success_db_failure_retry",
+      "result": {
+        "sendmail_calls": 2,
+        "status": "rejected",
+        "summary": [
+          {
+            "id": 9,
+            "status": "failed",
+            "reason": "simulated DB failure"
+          }
+        ]
+      }
+    },
+    {
+      "probe": "concurrent_batches_duplicate_send",
+      "result": {
+        "sendmail_calls": 2,
+        "outcomes": [
+          [
+            {
+              "id": 10,
+              "status": "sent",
+              "contact": "person@example.test"
+            }
+          ],
+          [
+            {
+              "id": 10,
+              "status": "sent",
+              "contact": "person@example.test"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "probe": "smtp_cleanup_after_login_failure",
+      "result": 0
+    },
+    {
+      "probe": "followup_before_due",
+      "result": {
+        "created": 13
+      }
+    },
+    {
+      "probe": "duplicate_followup_service",
+      "result": {
+        "created": 14
+      }
+    },
+    {
+      "probe": "followup_after_reply",
+      "result": {
+        "created": 15
+      }
+    },
+    {
+      "probe": "queued_followup_after_parent_reply",
+      "result": 1
+    },
+    {
+      "probe": "rejected_followup_blocks_replacement",
+      "result": true
+    },
+    {
+      "probe": "suppressed_contact_still_due",
+      "result": true
+    },
+    {
+      "probe": "tracking_includes_unsent",
+      "result": [
+        "rejected"
+      ]
+    },
+    {
+      "probe": "reply_without_message_id_or_date",
+      "result": [
+        {
+          "email_id": 999,
+          "contact_email": "old@example.test",
+          "match_type": "address_fallback"
+        }
+      ]
+    },
+    {
+      "probe": "imap_search_failures_reported",
+      "result": []
+    },
+    {
+      "probe": "imap_cleanup_after_login_failure",
+      "result": 0
+    },
+    {
+      "probe": "cross_origin_send_request",
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "probe": "empty_upload_filename_after_sanitizing",
+      "result": {
+        "status": 500
+      }
+    },
+    {
+      "probe": "fresh_db_integrity",
+      "result": "ok"
+    },
+    {
+      "probe": "fresh_db_foreign_keys",
+      "result": []
+    },
+    {
+      "probe": "fresh_db_indexes",
+      "result": [
+        [
+          "sqlite_autoindex_suppressions_1",
+          "suppressions"
+        ]
+      ]
+    },
+    {
+      "probe": "original_database_unchanged",
+      "result": true
+    },
+    {
+      "probe": "stdlib_cprofile_import",
+      "exception": "AttributeError",
+      "message": "module 'profile' has no attribute 'run'"
+    },
+    {
+      "probe": "python_syntax",
+      "result": [
+        "app.py",
+        "composer.py",
+        "config.py",
+        "contacts.py",
+        "db.py",
+        "fix.py",
+        "profile.py",
+        "qc.py",
+        "replies.py",
+        "repository.py",
+        "resume.py",
+        "reviewer.py",
+        "rewrite.py",
+        "sender.py",
+        "suppression.py",
+        "tracker.py",
+        "validate.py"
+      ]
+    },
+    {
+      "probe": "installed_dependencies",
+      "result": {
+        "Flask": "3.1.3",
+        "pydantic": "2.13.5",
+        "google-genai": "2.20.0",
+        "python-dotenv": "1.2.3",
+        "dnspython": "2.8.0",
+        "Werkzeug": "3.1.8",
+        "pytest": "9.1.1"
+      }
+    },
+    {
+      "probe": "ignored_local_release_inventory",
+      "result": {
+        "entries": 38,
+        "has_tests": true,
+        "has_env_file": false,
+        "has_database": false
+      }
+    }
+  ]
+}
