@@ -25,3 +25,4 @@ release/
 playwright-report/
 test-results/
 *.worker.lock
+*.schema.lock

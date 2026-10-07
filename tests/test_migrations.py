@@ -8,6 +8,7 @@ def test_init_is_idempotent(temp_db):
     db.init_db()
     with db.get_connection() as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0]==db.SCHEMA_VERSION
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0]=="wal"
         assert conn.execute("SELECT name FROM companies").fetchone()[0]=="Keep me"
         assert conn.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
         assert conn.execute("PRAGMA foreign_key_check").fetchall()==[]
@@ -98,6 +99,16 @@ def test_direct_duplicate_drafts_rejected(contact):
 def test_backup_refuses_overwrite(temp_db):
     import pytest
     with pytest.raises(ValueError,match="new file"): db.backup_database(temp_db)
+
+def test_concurrent_database_startup_is_serialized(tmp_path,monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    monkeypatch.setattr(config,"DB_PATH",tmp_path/"concurrent.db")
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda _:db.init_db(),range(8)))
+    with db.get_connection() as conn:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0]=="wal"
+        assert conn.execute("PRAGMA user_version").fetchone()[0]==db.SCHEMA_VERSION
+        assert conn.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
 
 def test_legacy_mismatch_can_be_rejected_without_losing_history(tmp_path,monkeypatch):
     from repository import EmailRepository

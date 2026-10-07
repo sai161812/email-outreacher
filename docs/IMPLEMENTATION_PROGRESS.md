@@ -55,3 +55,9 @@ Remaining work includes validated import/API/setup flows, AI generation, replies
 - Settings now offers explicit duplicate-contact review, remaining daily capacity and worker heartbeat. Archiving cancels unsubmitted work and preserves history. Follow-up listing pages past closed historical records.
 - Initial Linux CI found a slow-response setup race: profile-save completion refreshed Settings and erased a concurrently entered resume name. Profile readiness now updates in place. A browser test deliberately holds the save response while typing the resume name and verifies preservation.
 - Verification: full local suite **148 passed** before the CI timing patch; targeted browser suite **4 passed** with the delayed-response regression; JavaScript syntax passed. Cross-platform rerun pending for this source revision.
+
+## Serialized SQLite startup
+
+- Initial Windows CI exposed an OperationalError during simultaneous first stats/settings reads. Per-request connections were repeatedly changing journal mode. WAL is now enabled once during schema initialization, protected by a cross-process schema lock. Read connections never switch journal mode.
+- Added eight concurrent factory/read requests and eight concurrent database startups; both preserve a valid WAL database.
+- Verification: full suite **149 passed** before adding the separate concurrent-startup assertion; migration/API targeted suite **46 passed** with that assertion (150 tests total for the next full run). Linux CI for 135ac3a passed all earlier gates; final cross-platform run follows this fix.

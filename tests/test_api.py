@@ -156,3 +156,15 @@ def test_archiving_contact_cancels_unsubmitted_work(client,contact):
     assert post(client,f"/api/contacts/{person}",{"archived":True},method="patch").status_code==200
     assert EmailRepository.get_by_id(eid)["status"]=="canceled"
     assert client.get("/api/queue").get_json()==[]
+
+def test_concurrent_fresh_read_requests_do_not_change_journal_mode(temp_db):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    app=create_app({"TESTING":True})
+    barrier=Barrier(8,timeout=10)
+    def read(index):
+        with app.test_client() as client:
+            barrier.wait()
+            return client.get("/api/stats" if index%2 else "/api/settings").status_code
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        assert list(pool.map(read,range(8)))==[200]*8

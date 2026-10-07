@@ -5,6 +5,7 @@ mergeable into a bigger app later without a rewrite.
 """
 import sqlite3
 from contextlib import contextmanager
+from filelock import FileLock
 
 import config
 
@@ -95,8 +96,15 @@ def backup_database(destination=None):
 def init_db():
     """Upgrade legacy data without dropping rows; preserve a pre-upgrade backup."""
     config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with FileLock(str(config.DB_PATH)+".schema.lock",timeout=30):
+        _init_db_locked()
+
+def _init_db_locked():
+    config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(config.DB_PATH, timeout=30) as conn:
         conn.execute("PRAGMA foreign_keys=ON")
+        # Switching journal modes is a startup operation, never a per-request write.
+        conn.execute("PRAGMA journal_mode=WAL")
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         if version > SCHEMA_VERSION:
@@ -245,7 +253,6 @@ def get_connection(immediate=False):
     conn = sqlite3.connect(config.DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=FULL")
     try:
         if immediate:
