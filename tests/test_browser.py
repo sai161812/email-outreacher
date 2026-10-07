@@ -98,13 +98,22 @@ def test_settings_mutations_preserve_unsaved_profile(browser_app):
 
 def test_expired_session_cannot_render_a_stale_dashboard(browser_app):
     page,url,_,errors=browser_app
+    page.goto(url)
+    expect(page.get_by_role("heading",name="Dashboard",exact=True)).to_be_visible()
+    with page.expect_response(lambda response:response.url.endswith("/api/check_replies")):
+        page.get_by_role("button",name="Check replies",exact=True).click()
     held=[]
     page.route("**/api/settings",lambda route:held.append(route))
-    page.route("**/api/stats",lambda route:route.fulfill(status=401,json={"error":"Sign in again"}))
-    page.goto(url)
-    expect(page.get_by_role("heading",name="Owner sign in",exact=True)).to_be_visible()
+    page.route("**/api/jobs/*",lambda route:route.fulfill(status=401,json={"error":"Sign in again"}))
+    open_view(page,"Settings")
+    # Background operation polling expires the session while a different,
+    # successful view request is still in flight.
+    expect(page.get_by_role("heading",name="Owner sign in",exact=True)).to_be_visible(timeout=10000)
     held.pop().continue_()
-    expect(page.get_by_role("heading",name="Dashboard",exact=True)).to_have_count(0)
+    trigger=page.get_by_role("navigation").get_by_role("button",name="Settings",exact=True)
+    expect(trigger).not_to_have_attribute("aria-busy","true")
+    expect(page.get_by_role("heading",name="Owner sign in",exact=True)).to_be_visible()
+    expect(page.get_by_role("heading",name="Settings",exact=True)).to_have_count(0)
     expect(page.locator("#content")).to_have_attribute("aria-busy","false")
     assert errors==[]
 

@@ -1,6 +1,6 @@
 # Repair verification ledger
 
-Application revision: `24b929a` (7 October 2026). Local full suite: **150 passed**. This is verification of the listed repairs under the stated tests, not proof that all possible bugs are absent.
+Original audit application revision: `24b929a` (7 October 2026), **150 passed**. The subsequent product acceptance pass on `63dd14f` passed **167 tests** locally, adding slow-save/reconciliation, delivery-report and end-to-end follow-up checks. See [product readiness](PRODUCT_READINESS.md) and `audit/2026-10-07/verification_product.json` for current scope and release gates. This is verification of the listed repairs under the stated tests, not proof that all possible bugs are absent.
 
 `Verified` below means the implemented application behavior passed the named isolated checks. Provider transports are fake. Existing private data requiring an owner decision is listed separately and is not silently changed.
 

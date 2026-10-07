@@ -2,6 +2,8 @@
 
 A single-owner Flask dashboard for manual contact management, Gemini-assisted drafting, explicit review, Gmail SMTP delivery, and reply tracking. Python **3.12** is supported. The app defaults to loopback access and never schedules sending automatically.
 
+See [product acceptance and startup](docs/PRODUCT_READINESS.md) for the tested workflow scope and remaining account setup. If you previously used the UI-only preview, start fresh terminals so preview path overrides do not carry into normal operation.
+
 ## Install and start
 
 Windows PowerShell, from the repository:

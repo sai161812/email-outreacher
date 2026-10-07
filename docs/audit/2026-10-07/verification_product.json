@@ -1,0 +1,159 @@
+{
+  "audit_date": "2026-10-07",
+  "application_commit": "63dd14fff2d93ffa5300db4681fa7fe135527f5c",
+  "fix_commits": [
+    "a89b2299e2a1b5ed8bb80a1cc1557254ccbc484f",
+    "63dd14fff2d93ffa5300db4681fa7fe135527f5c"
+  ],
+  "local_regression": {
+    "command": ".venv/Scripts/python.exe -m pytest -q",
+    "passed": 167,
+    "failed": 0,
+    "duration_seconds": 38.29
+  },
+  "source_checks": "passed",
+  "dependency_check": "No broken requirements found",
+  "dependency_audit": "No known vulnerabilities found",
+  "clean_runtime_smoke": "passed; fresh virtual environment installed from committed ZIP using hashed runtime lock; Waitress, database init/check, worker --once and backup",
+  "source_package": "dist/email-outreacher-63dd14fff2d9.zip",
+  "credential_readiness": {
+    "env_file_exists": false,
+    "gemini_key_configured": false,
+    "gmail_credentials_configured": false
+  },
+  "limits": [
+    "Live Gmail SMTP/IMAP and Gemini account checks require local credential configuration",
+    "Public HTTPS deployment remains unverified",
+    "Actual legacy database not migrated in place; three duplicate-contact groups retained for owner review",
+    "Existing visual design retained for a later UI phase"
+  ],
+  "ci": {
+    "run_id": 37662562723,
+    "url": "https://github.com/sai161812/email-outreacher/actions/runs/37662562723",
+    "jobs": [
+      {
+        "name": "verify (ubuntu-latest)",
+        "id": 112933511955,
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install locked development environment",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install Chromium",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check tracked source",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run regression and browser tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Audit installed dependencies",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build clean source release",
+            "conclusion": "success"
+          },
+          {
+            "name": "Verify release in a clean runtime",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "name": "verify (windows-latest)",
+        "id": 112933512331,
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install locked development environment",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install Chromium",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check tracked source",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run regression and browser tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Audit installed dependencies",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build clean source release",
+            "conclusion": "success"
+          },
+          {
+            "name": "Verify release in a clean runtime",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      }
+    ]
+  },
+  "additional_session_expiry_regression": {
+    "passed": 1,
+    "scope": "Background operation polling expires authentication during a successful delayed Settings load; sign-in remains visible.",
+    "changes": "Test only; application source remains 63dd14f"
+  }
+}
