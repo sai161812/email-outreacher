@@ -1,173 +1,151 @@
+import hashlib
+import random
 import smtplib
 import ssl
 import time
-import random
-from datetime import datetime, timezone, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
-from email.utils import make_msgid
+from email.message import EmailMessage
+from email.utils import format_datetime, make_msgid
 from pathlib import Path
 import config
-from repository import EmailRepository, SuppressionRepository
+import delivery
+from errors import Conflict
+from repository import EmailRepository, SuppressionRepository, event
+from db import get_connection
 
-def _get_personalized_attachment_name(company_name, original_path):
-    if not company_name:
-        return Path(original_path).name
-    clean = "".join(c if c.isalnum() else "_" for c in company_name)
-    clean = clean.strip("_")
-    return f"Resume_{clean}.pdf"
+def _get_personalized_attachment_name(company_name, original_path="resume.pdf"):
+    clean="".join(c if c.isalnum() else "_" for c in (company_name or "")).strip("_")[:80]
+    return f"Resume_{clean or 'Candidate'}.pdf"
 
 def get_approved_queue():
-    return [dict(r) for r in EmailRepository.get_approved_queue()]
-
-def count_company_sends_this_week(company_id):
-    last_week = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-    return EmailRepository.count_company_sends_since(company_id, last_week)
+    return EmailRepository.get_approved_queue()
 
 def count_sends_today():
     return EmailRepository.count_sends_today()
 
-def is_in_send_window(now=None) -> bool:
-    if now is None:
-        now = datetime.now()
-    day_str = now.strftime("%a").lower()
-    in_day = day_str in config.SEND_DAYS
-    in_hour = config.SEND_START_HOUR <= now.hour < config.SEND_END_HOUR
-    return in_day and in_hour
+def count_company_sends_this_week(company_id):
+    from datetime import timedelta
+    return EmailRepository.count_company_sends_since(company_id,(config.now()-timedelta(days=7)).isoformat())
 
-def _send_one(server, to_email, subject, body, resume_path=None, company_name=None, in_reply_to=None, resume_url=None, attach_mode=None):
-    if attach_mode is None:
-        attach_mode = config.RESUME_ATTACH_MODE
+def is_in_send_window(now=None):
+    local = (now or config.now()).astimezone(config.TIMEZONE)
+    return local.strftime("%a").lower() in config.SEND_DAYS and config.SEND_START_HOUR<=local.hour<config.SEND_END_HOUR
 
-    msg = MIMEMultipart()
-    msg_id = make_msgid()
-    msg["Message-ID"] = msg_id
-    msg["From"] = config.GMAIL_ADDRESS
-    msg["To"] = to_email
-    msg["Subject"] = subject
-
+def _send_one(server,to_email,subject,body,resume_path=None,company_name=None,in_reply_to=None,
+              resume_url=None,attach_mode=None,message_id=None,asset=None):
+    msg=EmailMessage()
+    msg["Message-ID"]=message_id or make_msgid(domain="outreach.local")
+    msg["Date"]=format_datetime(config.now())
+    msg["From"]=config.GMAIL_ADDRESS
+    msg["To"]=to_email
+    msg["Subject"]=subject
     if in_reply_to:
-        msg["In-Reply-To"] = in_reply_to
-        msg["References"] = in_reply_to
+        msg["In-Reply-To"]=in_reply_to
+        msg["References"]=in_reply_to
+    mode=attach_mode or config.RESUME_ATTACH_MODE
+    if asset:
+        resume_path=asset.get("path")
+        resume_url=asset.get("url")
+    if mode=="link" and resume_url and resume_url not in body:
+        body += f"\n\nResume: {resume_url}"
+    msg.set_content(body)
+    if mode=="attach" and resume_path:
+        import resume
+        _, data=resume.checked_pdf(resume_path)
+        if asset and hashlib.sha256(data).hexdigest()!=asset["sha256"]:
+            raise Conflict("Resume changed since approval")
+        msg.add_attachment(data,maintype="application",subtype="pdf",
+                           filename=_get_personalized_attachment_name(company_name,resume_path))
+    elif mode=="link" and resume_path and not resume_url:
+        raise ValueError("Resume link is required in link mode")
+    server.sendmail(config.GMAIL_ADDRESS,to_email,msg.as_bytes())
+    return msg["Message-ID"]
 
-    if attach_mode == "link" and resume_url:
-        if resume_url not in body:
-            body = f"{body}\n\nResume: {resume_url}"
-
-    msg.attach(MIMEText(body, "plain"))
-
-    if (attach_mode == "attach" or not resume_url) and resume_path and Path(resume_path).exists():
-        filename = _get_personalized_attachment_name(company_name, resume_path)
-        with open(resume_path, "rb") as f:
-            part = MIMEApplication(f.read(), Name=filename)
-        part["Content-Disposition"] = f'attachment; filename="{filename}"'
-        msg.attach(part)
-
-    server.sendmail(config.GMAIL_ADDRESS, to_email, msg.as_string())
-    return msg_id
-
-def run_send_batch(dry_run=False, force=True):
-    if not force and not is_in_send_window():
-        return [{"error": f"Outside send window ({config.SEND_START_HOUR}:00 - {config.SEND_END_HOUR}:00)"}]
-
-    queue = get_approved_queue()
-    remaining_today = config.DAILY_SEND_CAP - count_sends_today()
-    summary = []
-
-    if remaining_today <= 0:
-        return [{"error": "Daily send limit reached"}]
-
-    company_counts = {}
-    cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-    filtered_queue = []
-
-    for item in queue:
-        cid = item["company_id"]
-        if cid not in company_counts:
-            company_counts[cid] = EmailRepository.count_company_sends_since(cid, cutoff_7d)
-
-        if company_counts[cid] >= config.MAX_PER_COMPANY_PER_WEEK:
-            continue
-        else:
-            filtered_queue.append(item)
-            company_counts[cid] += 1
-
-    queue = filtered_queue
-    batch = queue[:remaining_today]
-
-    server = None
-    if not dry_run and batch:
-        context = ssl.create_default_context()
-        server = smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT)
-        server.starttls(context=context)
-        server.login(config.GMAIL_ADDRESS, config.GMAIL_APP_PASSWORD)
-
+def run_send_batch(dry_run=False, force=False, progress=None):
+    if force:
+        raise ValueError("Send-window overrides are disabled; change the configured window explicitly")
+    queue=get_approved_queue()
+    summary=[]
+    if not dry_run and queue:
+        config.require_gmail_creds()
+    server=None
+    submitted=0
     try:
-        for i, item in enumerate(batch):
+        for item in queue:
+            eid=item["id"]
+            if submitted and not dry_run:
+                time.sleep(random.randint(config.MIN_DELAY_SECONDS,config.MAX_DELAY_SECONDS))
+            if not is_in_send_window():
+                summary.append({"id":eid,"status":"deferred","reason":"Outside send window"})
+                continue
             if SuppressionRepository.is_suppressed(item["contact_email"]):
-                summary.append({"id": item["id"], "status": "skipped", "reason": "suppressed"})
+                summary.append({"id":eid,"status":"skipped","reason":"Recipient is suppressed"})
                 continue
-
-            subject = item["subject"]
-            in_reply_to = None
-
-            if item.get("follow_up_to_email_id"):
-                original = EmailRepository.get_by_id(item["follow_up_to_email_id"])
-                if original:
-                    in_reply_to = original["message_id"]
-                    orig_subj = original["subject"] or ""
-                    if not subject.lower().startswith("re:"):
-                        subject = f"Re: {orig_subj}" if orig_subj else f"Re: {subject}"
-
-            if dry_run:
-                summary.append({"id": item["id"], "status": "dry_run", "contact": item["contact_email"]})
-                continue
-
-            success = False
-            for attempt in range(2):
+            claim=None
+            try:
+                if dry_run:
+                    with get_connection(immediate=True) as conn:
+                        row=dict(conn.execute("SELECT * FROM emails WHERE id=?",(eid,)).fetchone())
+                        delivery._validate(conn,row)
+                        delivery._quota(conn,row["company_id"])
+                    summary.append({"id":eid,"status":"dry_run","contact":item["contact_email"]})
+                    continue
+                claim=delivery.claim(eid)
+                if not claim:
+                    summary.append({"id":eid,"status":"skipped","reason":"Already claimed or changed"})
+                    continue
+                # Establish connection before entering the submission-uncertain phase.
+                if server is None:
+                    server=smtplib.SMTP(config.SMTP_HOST,config.SMTP_PORT,timeout=config.PROVIDER_TIMEOUT)
+                    server.starttls(context=ssl.create_default_context())
+                    server.login(config.GMAIL_ADDRESS,config.GMAIL_APP_PASSWORD)
+                approved=delivery.prepare(claim["attempt_id"])
+                parent=EmailRepository.get_by_id(item["follow_up_to_email_id"]) if item["follow_up_to_email_id"] else None
                 try:
-
-                    resume_path = None
-                    resume_url = None
-                    if item.get("resume_variant_id"):
-                        from repository import ResumeRepository
-                        for rv in ResumeRepository.get_all():
-                            if rv["id"] == item["resume_variant_id"]:
-                                resume_path = rv["file_path"]
-                                resume_url = rv.get("resume_url")
-                                break
-
-                    msg_id = _send_one(
-                        server,
-                        item["contact_email"],
-                        subject,
-                        item["body"],
-                        resume_path=resume_path,
-                        company_name=item.get("company_name", ""),
-                        in_reply_to=in_reply_to,
-                        resume_url=resume_url,
-                        attach_mode=config.RESUME_ATTACH_MODE,
-                    )
-
-                    EmailRepository.update_sent(item["id"], msg_id, subject)
-                    summary.append({"id": item["id"], "status": "sent", "contact": item["contact_email"]})
-                    success = True
-                    break
-                except Exception as e:
-                    if attempt == 0:
-                        time.sleep(5)
-                    else:
-                        EmailRepository.update_status(item["id"], 'rejected')
-                        summary.append({"id": item["id"], "status": "failed", "reason": str(e)})
-
-            if success and i < len(batch) - 1:
-                time.sleep(random.randint(config.MIN_DELAY_SECONDS, config.MAX_DELAY_SECONDS))
+                    msg_id=_send_one(server,approved["recipient"],approved["subject"],approved["body"],
+                        company_name=approved["company_name"],in_reply_to=parent["message_id"] if parent else None,
+                        attach_mode=approved["attach_mode"],message_id=claim["message_id"],asset=approved["resume"])
+                except smtplib.SMTPRecipientsRefused as exc:
+                    delivery.finish(claim["attempt_id"],"failed","recipient_refused")
+                    if all(code>=500 for code,_ in exc.recipients.values()):
+                        SuppressionRepository.add(approved["recipient"],"hard bounce")
+                    summary.append({"id":eid,"status":"failed","reason":"Recipient refused"})
+                    continue
+                except (smtplib.SMTPSenderRefused,smtplib.SMTPDataError) as exc:
+                    delivery.finish(claim["attempt_id"],"failed",type(exc).__name__)
+                    summary.append({"id":eid,"status":"failed","reason":"SMTP rejected the message"})
+                    continue
+                except Exception:
+                    delivery.finish(claim["attempt_id"],"uncertain","submission_interrupted")
+                    summary.append({"id":eid,"status":"uncertain","reason":"Delivery requires reconciliation; automatic retry disabled"})
+                    server=None
+                    continue
+                submitted+=1
+                try:
+                    EmailRepository.update_sent(eid,msg_id,approved["subject"])
+                    summary.append({"id":eid,"status":"sent","contact":approved["recipient"]})
+                except Exception:
+                    # SMTP already succeeded. Never re-enter submission.
+                    try:
+                        delivery.finish(claim["attempt_id"],"uncertain","acceptance_record_failed")
+                    except Exception:
+                        pass  # Durable 'submitting' attempt is recovered as uncertain.
+                    summary.append({"id":eid,"status":"uncertain","reason":"SMTP accepted; database confirmation failed"})
+            except (ValueError,Conflict) as exc:
+                if claim:
+                    delivery.finish(claim["attempt_id"],"canceled","preflight_failed")
+                summary.append({"id":eid,"status":"deferred","reason":str(exc)})
+            except Exception:
+                if claim:
+                    delivery.finish(claim["attempt_id"],"failed","transport_setup_failed")
+                summary.append({"id":eid,"status":"failed","reason":"Mail transport unavailable; check settings"})
+                break
+            finally:
+                if progress:
+                    progress(summary)
     finally:
         if server:
             try:
                 server.quit()
             except Exception:
-                pass
-
+                server.close()
     return summary

@@ -1,0 +1,54 @@
+"""One eligibility policy used for listing, composition, approval and delivery."""
+from datetime import datetime, timedelta, timezone
+import config
+from errors import Conflict
+from repository import JOINED
+
+CLOSED = {"replied","bounced","interview_scheduled","interview_completed","offer","no_offer"}
+
+def parsed_time(value):
+    if not value:
+        return None
+    parsed = datetime.fromisoformat(value.replace("Z","+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+def check(conn, row, for_existing=False):
+    parent_id = row.get("follow_up_to_email_id")
+    if not parent_id:
+        return
+    parent = conn.execute("SELECT * FROM emails WHERE id=?", (parent_id,)).fetchone()
+    if not parent or not parent["sent_at"]:
+        raise Conflict("Follow-ups require an actually sent email")
+    root = parent["thread_root_id"] or parent["id"]
+    ct = conn.execute("SELECT email,archived FROM contacts WHERE id=?", (row["contact_id"],)).fetchone()
+    if not ct or ct["archived"] or conn.execute("SELECT 1 FROM suppressions WHERE lower(trim(email))=?", (ct["email"].strip().lower(),)).fetchone():
+        raise Conflict("Recipient is unavailable or suppressed")
+    history = conn.execute("""SELECT e.* FROM emails e JOIN contacts c ON c.id=e.contact_id
+        WHERE lower(trim(c.email))=?""",(ct["email"].strip().lower(),)).fetchall()
+    thread = [dict(e) for e in history if e["id"]==root or e["thread_root_id"]==root]
+    if any(e["status"] in CLOSED for e in history):
+        raise Conflict("Recipient has replied or reached a closed outcome")
+    sent = [e for e in thread if e["sent_at"]]
+    if not sent or config.now()-max(parsed_time(e["sent_at"]) for e in sent) < timedelta(days=config.FOLLOW_UP_AFTER_DAYS):
+        raise Conflict("Follow-up is not due yet")
+    existing_id = row.get("id") if for_existing else None
+    followups = [e for e in thread if e["follow_up_to_email_id"] and e["id"]!=existing_id and e["status"] not in {"rejected","failed","canceled"}]
+    if len(followups) >= config.MAX_FOLLOW_UPS:
+        raise Conflict("Follow-up limit reached")
+    if any(e["status"] in {"pending_review","approved","sending","uncertain"} for e in followups):
+        raise Conflict("A follow-up already exists")
+
+def due():
+    from db import get_connection
+    with get_connection() as conn:
+        candidates = [dict(r) for r in conn.execute(JOINED+"""WHERE e.sent_at IS NOT NULL
+            AND e.follow_up_to_email_id IS NULL AND ct.archived=0 AND c.archived=0 ORDER BY e.sent_at LIMIT 1000""")]
+        result=[]
+        for original in candidates:
+            proposed={**original,"follow_up_to_email_id":original["id"]}
+            try:
+                check(conn,proposed)
+                result.append(original)
+            except Conflict:
+                continue
+        return result

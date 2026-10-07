@@ -1,41 +1,46 @@
+"""Deterministic checks: hard blockers and optional writing suggestions."""
 import re
 
-def detect_placeholders(text: str) -> list[str]:
-    pattern = r"\[[A-Za-z][A-Za-z '\-]{1,20}\]"
-    if not text:
-        return []
-    return re.findall(pattern, text)
+def detect_placeholders(text):
+    return re.findall(r"\[[A-Za-z][A-Za-z '\-]{1,40}\]|\{\{[^}]+\}\}", text or "")
 
-def check_body(body: str) -> list[str]:
+def blockers(subject, body):
+    errors = []
+    if not isinstance(subject, str) or not subject.strip():
+        errors.append("Subject is required")
+    if not isinstance(body, str) or not body.strip():
+        errors.append("Body is required")
+    if any(token in (body or "") for token in ("Failed to parse structured output", "PARSE_ERROR")):
+        errors.append("Generation failed: regenerate the draft")
+    if detect_placeholders(subject) or detect_placeholders(body):
+        errors.append("Replace all placeholders")
+    if "\n" in (subject or "") or "\r" in (subject or ""):
+        errors.append("Subject must be one line")
+    if len(subject or "") > 200 or len(body or "") > 12000:
+        errors.append("Content exceeds size limits")
+    return errors
+
+def check_body(body, follow_up=False):
+    if not body or not body.strip():
+        return ["Body is required"]
+    words = len(body.split())
     warnings = []
-    if not body:
-        return warnings
-
-    words = body.split()
-    if len(words) < 50 or len(words) > 90:
-        warnings.append(f"Body length ({len(words)} words) outside 50-90 range")
-
-    banned = ["hope this email finds you", "my name is", "i am writing to"]
-    lower_body = body.lower()
-    for phrase in banned:
-        if phrase in lower_body:
-            warnings.append(f"Contains banned phrase: '{phrase}'")
-
+    if follow_up and words > 40:
+        warnings.append(f"Follow-up pitch is {words} words; target at most 40")
+    elif not follow_up and not 50 <= words <= 90:
+        warnings.append(f"Pitch is {words} words; target 50-90")
+    for phrase in ("hope this email finds you", "my name is", "i am writing to"):
+        if phrase in body.lower():
+            warnings.append(f"Contains filler: {phrase}")
     return warnings
 
-def check_subject(subject: str) -> list[str]:
-    warnings = []
-    if not subject:
-        return warnings
+def check_subject(subject):
+    if not subject or not subject.strip():
+        return ["Subject is required"]
+    return ["Subject target is at most 6 words"] if len(subject.split()) > 6 else []
 
-    words = subject.split()
-    if len(words) > 6:
-        warnings.append(f"Subject length ({len(words)} words) over 6 words")
-
-    generic_patterns = ["internship opportunity", "application"]
-    lower_subj = subject.lower()
-    for pat in generic_patterns:
-        if pat in lower_subj:
-            warnings.append(f"Subject contains generic phrase: '{pat}'")
-
-    return warnings
+def warnings(subject, body, follow_up=False):
+    # Greeting and signature are assembled by us, not part of the pitch budget.
+    parts = (body or "").split("\n\n")
+    pitch = "\n\n".join(parts[1:-1]) if len(parts) >= 3 and parts[0].startswith("Hi ") else body
+    return blockers(subject, body) + check_subject(subject) + check_body(pitch, follow_up)

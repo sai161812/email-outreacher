@@ -12,7 +12,7 @@ import re
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
-import profile
+import candidate_profile as profile
 import qc
 import suppression
 
