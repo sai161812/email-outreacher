@@ -35,6 +35,7 @@ def domain_name(value):
 
 def add_company(name,domain=None,job_url=None,job_text=None,notes=None):
     name=normalize_company_name(text(name,"name",True,200))
+    if not name: raise ValueError("Company name is required")
     return CompanyRepository.create(name,domain_name(domain),resume.safe_url(job_url),text(job_text,"job_text",maximum=20000),text(notes,"notes"))
 
 def add_contact(company_id,email,name=None,title=None,source=None):

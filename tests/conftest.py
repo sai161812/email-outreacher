@@ -9,11 +9,15 @@ _session = tempfile.TemporaryDirectory(prefix="outreach-test-session-")
 os.environ["OUTREACH_DB_PATH"] = str(Path(_session.name) / "session.db")
 
 @pytest.fixture(autouse=True)
-def no_network(monkeypatch):
+def no_network(monkeypatch, request):
+    original=socket.socket.connect
     def blocked(*args, **kwargs):
+        if request.node.get_closest_marker("browser") and len(args)>1 and args[1][0] in {"127.0.0.1","localhost","::1"}:
+            return original(*args,**kwargs)
         raise AssertionError("Real network is forbidden in tests")
     monkeypatch.setattr(socket.socket, "connect", blocked)
-    monkeypatch.setattr(socket, "create_connection", blocked)
+    if not request.node.get_closest_marker("browser"):
+        monkeypatch.setattr(socket, "create_connection", blocked)
 
 @pytest.fixture
 def temp_db(tmp_path, monkeypatch):

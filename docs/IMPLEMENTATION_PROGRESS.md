@@ -22,3 +22,11 @@ Remaining work includes validated import/API/setup flows, AI generation, replies
 - Statistics count actual sent messages cumulatively and use local send dates and resume IDs.
 - Personal context is removed from the tracked tree while its local file is preserved; setup uses an ignored candidate_context.txt and an example template.
 - Verification: full isolated suite **58 passed**, including concurrent generation/import, invalid output, saved research, resume drafting, early/replied follow-ups, false reply rejection and cumulative outcomes.
+
+## Protected API, durable jobs and browser workflow
+
+- Replaced blocking provider endpoints with durable, idempotent jobs and a process-locked worker with explicit crash recovery. Job results report actual sent/deferred/failed/uncertain counts.
+- Added typed JSON errors, revision-aware review endpoints, loopback Host/Origin checks, CSRF protection, optional single-owner login and production server dependency.
+- Added browser setup for companies, contacts, candidate facts, resumes and suppression; safe DOM rendering; explicit dirty-review handling; keyboard dialogs and responsive layouts.
+- Browser verification found and fixed nested-form rendering and a navigation race during writes.
+- Verification: full isolated suite **80 passed**; fresh setup → mocked draft → edit → approval → one mocked SMTP submission → reply outcome; 375/768/1440px screenshots inspected, keyboard focus/Escape checked. No real-provider operations performed.
