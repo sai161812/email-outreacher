@@ -69,3 +69,10 @@ Application source **24b929a** passed **150 tests** locally and on GitHub Window
 The release smoke harness now drains Waitress tasks before closing sockets; its local rerun exits cleanly. The final documentation commit changes the ledger and this harness cleanup; application source remains the verified revision above.
 
 See AUDIT_COMPLETION.md for every A01-A52 item and verification_final.json for the gate summary. Ready for an overall audit, with live-provider/public-deployment checks and three private duplicate-contact groups explicitly remaining for review. No production records were merged/deleted or migrated in place; unrelated local scripts were preserved.
+
+## Product acceptance follow-up
+
+- Re-ran the existing baseline: **150 passed**. Added four regressions; all four failed against the previous implementation.
+- Review now preserves edits typed during a slow save, requires another save before approval, serializes competing review actions, and locks inputs during approval/rejection. Settings list mutations preserve other forms. Session expiry invalidates pending view rendering.
+- Uncertain-delivery reconciliation checks and updates state in one transaction. Conflicting confirmations cannot both succeed. A delayed confirmation retains the recorded submission time (or reservation time for older attempts without that event), keeping daily/weekly quotas and follow-up dates accurate.
+- Verification for this change group: **23 passed** across browser and sender suites, plus JavaScript syntax and whitespace checks. Full release gates follow the remaining acceptance fixes.

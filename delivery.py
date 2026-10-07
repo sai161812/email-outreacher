@@ -7,7 +7,7 @@ import qc
 import followups
 from db import get_connection
 from errors import Conflict
-from repository import require_email, snapshot, timestamp, event, one
+from repository import require_email, snapshot, timestamp, event
 
 def _quota(conn, company_id, exclude=None, projected=()):
     local = config.now().astimezone(config.TIMEZONE)
@@ -72,22 +72,32 @@ def prepare(attempt_id):
         event(conn,row["id"],"submission_started",{"attempt_id":attempt_id})
         return approved
 
-def finish(attempt_id, state, error_code=None):
+def finish(attempt_id, state, error_code=None, *, expected_state=None):
     if state not in {"accepted","failed","uncertain","canceled"}:
         raise ValueError("Invalid attempt result")
     with get_connection(immediate=True) as conn:
         attempt = conn.execute("SELECT * FROM send_attempts WHERE id=?", (attempt_id,)).fetchone()
         if not attempt:
             raise Conflict("Attempt not found")
+        if expected_state is not None and attempt["state"]!=expected_state:
+            raise Conflict("Only uncertain attempts can be reconciled; reload the latest result")
         if attempt["state"]=="accepted":
-            return
+            if state=="accepted": return
+            raise Conflict("Accepted delivery cannot be changed")
         if attempt["state"] not in {"reserved","submitting","uncertain"}:
             raise Conflict("Attempt is already completed")
         status={"accepted":"sent","failed":"failed","uncertain":"uncertain","canceled":"canceled"}[state]
         now=timestamp()
+        sent_at=now
+        if state=="accepted" and attempt["state"]=="uncertain":
+            # Confirmation may happen days later. Keep quota/follow-up dates at
+            # the recorded submission time, not the operator's confirmation time.
+            started=conn.execute("""SELECT created_at FROM events WHERE email_id=? AND kind='submission_started'
+                AND json_extract(detail,'$.attempt_id')=? ORDER BY id LIMIT 1""",(attempt["email_id"],attempt_id)).fetchone()
+            sent_at=started["created_at"] if started else attempt["created_at"]
         conn.execute("UPDATE send_attempts SET state=?,updated_at=?,error_code=? WHERE id=?", (state,now,error_code,attempt_id))
         if state=="accepted":
-            conn.execute("UPDATE emails SET status='sent',sent_at=COALESCE(sent_at,?),updated_at=? WHERE id=?",(now,now,attempt["email_id"]))
+            conn.execute("UPDATE emails SET status='sent',sent_at=COALESCE(sent_at,?),updated_at=? WHERE id=?",(sent_at,now,attempt["email_id"]))
         else:
             conn.execute("UPDATE emails SET status=?,updated_at=? WHERE id=?",(status,now,attempt["email_id"]))
         event(conn,attempt["email_id"],f"send_{state}",{"attempt_id":attempt_id,"error_code":error_code})
@@ -105,7 +115,6 @@ def recover():
             event(conn,attempt["email_id"],"recovered",{"attempt_id":attempt["id"],"state":state})
 
 def reconcile(attempt_id, accepted):
-    attempt=one("SELECT * FROM send_attempts WHERE id=?",(attempt_id,))
-    if not attempt or attempt["state"]!="uncertain":
-        raise Conflict("Only uncertain attempts can be reconciled")
-    finish(attempt_id,"accepted" if accepted else "failed","operator_reconciliation")
+    if type(accepted) is not bool:
+        raise ValueError("accepted must be boolean")
+    finish(attempt_id,"accepted" if accepted else "failed","operator_reconciliation",expected_state="uncertain")

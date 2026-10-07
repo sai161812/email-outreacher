@@ -1,5 +1,6 @@
 import json
 import smtplib
+from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from unittest.mock import Mock
@@ -135,6 +136,38 @@ def test_recovery_never_resubmits(draft):
     assert EmailRepository.get_by_id(draft)["status"]=="uncertain"
     delivery.reconcile(claim["attempt_id"],True)
     assert EmailRepository.get_by_id(draft)["status"]=="sent"
+
+def test_delayed_reconciliation_preserves_submission_date(draft,mail,monkeypatch):
+    submitted=config.now()-timedelta(days=10)
+    monkeypatch.setattr(config,"now",lambda:submitted)
+    reviewer.approve(draft)
+    attempt=delivery.claim(draft)
+    delivery.prepare(attempt["attempt_id"])
+    delivery.finish(attempt["attempt_id"],"uncertain","connection_lost")
+    monkeypatch.setattr(config,"now",lambda:submitted+timedelta(days=10))
+    delivery.reconcile(attempt["attempt_id"],True)
+    assert EmailRepository.get_by_id(draft)["sent_at"]==submitted.isoformat()
+    assert sender.count_sends_today()==0
+    assert sender.count_company_sends_this_week(EmailRepository.get_by_id(draft)["company_id"])==0
+
+def test_conflicting_reconciliation_is_atomic(draft,mail):
+    reviewer.approve(draft)
+    attempt=delivery.claim(draft)
+    delivery.prepare(attempt["attempt_id"])
+    delivery.finish(attempt["attempt_id"],"uncertain")
+    barrier=Barrier(2,timeout=5)
+    def resolve(accepted):
+        barrier.wait()
+        try:
+            delivery.reconcile(attempt["attempt_id"],accepted)
+            return "resolved"
+        except Conflict:
+            return "conflict"
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results=list(pool.map(resolve,[True,False]))
+    assert sorted(results)==["conflict","resolved"]
+    with get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM events WHERE email_id=? AND kind IN ('send_accepted','send_failed')",(draft,)).fetchone()[0]==1
 
 def test_message_headers_and_attachment(contact,mail,tmp_path,monkeypatch):
     import resume

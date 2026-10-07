@@ -42,6 +42,60 @@ def browser_app(temp_db,monkeypatch):
 def open_view(page,name):
     page.get_by_role("navigation").get_by_role("button",name=name,exact=True).click()
 
+def test_review_edits_during_save_require_another_save(browser_app,contact):
+    from repository import EmailRepository
+    page,url,_,errors=browser_app
+    company,person=contact
+    eid=EmailRepository.create(company,person,None,"Hook","Subject","Original body",None)
+    page.goto(url)
+    open_view(page,"Review")
+    held=[]
+    page.route("**/api/review/*",lambda route:held.append(route))
+    page.get_by_label("Body",exact=True).fill("First edit")
+    page.get_by_role("button",name="Save edits",exact=True).click()
+    page.get_by_label("Body",exact=True).fill("Newer edit while saving")
+    expect(page.get_by_role("button",name="Reject",exact=True)).to_be_disabled()
+    held.pop().continue_()
+    expect(page.get_by_role("button",name="Save edits",exact=True)).to_be_enabled()
+    approve=page.get_by_role("button",name="Approve saved revision")
+    expect(approve).to_be_disabled()
+    expect(page.get_by_label("Body",exact=True)).to_have_value("Newer edit while saving")
+    assert EmailRepository.get_by_id(eid)["body"]=="First edit"
+    page.unroute("**/api/review/*")
+    page.get_by_role("button",name="Save edits",exact=True).click()
+    expect(approve).to_be_enabled()
+    # An approval in flight must lock editable content and other actions.
+    page.route("**/api/review/*",lambda route:held.append(route))
+    approve.click()
+    expect(page.get_by_label("Body",exact=True)).to_be_disabled()
+    expect(page.get_by_role("button",name="Save edits",exact=True)).to_be_disabled()
+    held.pop().continue_()
+    expect(approve).to_have_count(0)
+    assert EmailRepository.get_by_id(eid)["body"]=="Newer edit while saving"
+    assert EmailRepository.get_by_id(eid)["status"]=="approved"
+    assert errors==[]
+
+def test_settings_mutations_preserve_unsaved_profile(browser_app):
+    page,url,_,errors=browser_app
+    page.goto(url)
+    open_view(page,"Settings")
+    page.get_by_label("full name",exact=True).fill("Unsaved candidate")
+    page.get_by_label("Candidate facts",exact=False).fill("Unsaved verified facts")
+    page.get_by_label("Resume name",exact=True).fill("Link CV")
+    page.get_by_label("HTTPS resume link",exact=False).fill("https://example.test/cv.pdf")
+    page.get_by_role("button",name="Register resume",exact=True).click()
+    expect(page.get_by_role("cell",name="Link CV",exact=True)).to_be_visible()
+    expect(page.get_by_label("full name",exact=True)).to_have_value("Unsaved candidate")
+    page.get_by_label("Email to suppress",exact=True).fill("blocked@example.test")
+    page.get_by_label("Reason",exact=True).fill("Requested")
+    page.get_by_role("button",name="Suppress address",exact=True).click()
+    expect(page.get_by_role("cell",name="blocked@example.test",exact=True)).to_be_visible()
+    expect(page.get_by_label("Candidate facts",exact=False)).to_have_value("Unsaved verified facts")
+    page.get_by_role("button",name="Remove suppression",exact=True).click()
+    expect(page.get_by_role("cell",name="blocked@example.test",exact=True)).to_have_count(0)
+    expect(page.get_by_label("full name",exact=True)).to_have_value("Unsaved candidate")
+    assert errors==[]
+
 def test_full_setup_review_send_workflow(browser_app):
     page,url,smtp,errors=browser_app
     page.goto(url)

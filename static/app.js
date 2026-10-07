@@ -32,12 +32,12 @@ async function api(path,method="GET",data=null){
     if(method!=="GET")pendingWrites.add(task);
     try{return await task;}finally{pendingWrites.delete(task);}
 }
-function button(label,fn,kind=""){
+function button(label,fn,kind="",isDisabled=()=>false){
     const b=el("button",{type:"button",class:kind},label);
     b.addEventListener("click",async()=>{
         if(b.disabled)return;b.disabled=true;b.setAttribute("aria-busy","true");
         try{await fn(b);}catch(error){toast(error.message,true);}
-        finally{b.disabled=false;b.removeAttribute("aria-busy");}
+        finally{b.disabled=isDisabled();b.removeAttribute("aria-busy");}
     });return b;
 }
 function field(label,input){const id=input.id||crypto.randomUUID();input.id=id;return el("div",{class:"field"},el("label",{for:id},label),input);}
@@ -122,13 +122,22 @@ async function reviewView(){
     const root=el("div",{},title("Review queue"));
     if(!drafts.length)root.append(el("p",{},"No drafts awaiting review."));
     for(let draft of drafts){
+        let writing=false,editSerial=0,save,reject;
         const subject=input(draft.subject),hook=input(draft.hook),body=el("textarea",{value:draft.body||"",rows:8});
         const variant=select([[0,"No resume"],...setup.resumes.map(r=>[r.id,r.name])],draft.resume_variant_id||0);
         const warnings=el("p",{class:"warning"},draft.qc_warnings||"Review facts, recipient, content and resume before approving.");
         const status=el("p",{class:"muted"},"Revision "+draft.revision+" · Pending review");
-        const approve=button("Approve saved revision",async()=>{await api("/api/review/"+draft.id,"POST",{action:"approve",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Approved. Available in Queue.");},"primary");
+        const approve=button("Approve saved revision",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"approve",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Approved. Available in Queue.");},true),"primary",()=>writing||dirty.has(draft.id));
         const section=card(draft.company_name+" · "+draft.contact_email,status,field("Subject",subject),field("Research hook",hook),field("Body",body),field("Resume choice",variant),warnings);
-        const mark=()=>{dirty.add(draft.id);approve.disabled=true;status.textContent="Unsaved edits — save before approving";};
+        function syncActions(){save.disabled=writing;reject.disabled=writing;approve.disabled=writing||dirty.has(draft.id);}
+        async function writeReview(action,lockInputs=false){
+            if(writing)return;
+            writing=true;syncActions();
+            if(lockInputs)for(const node of [subject,hook,body,variant])node.disabled=true;
+            try{await action();}
+            finally{writing=false;for(const node of [subject,hook,body,variant])node.disabled=false;syncActions();}
+        }
+        const mark=()=>{editSerial++;dirty.add(draft.id);approve.disabled=true;status.textContent="Unsaved edits — save before approving";};
         for(const node of [subject,hook,body,variant])node.addEventListener("input",mark);
         section.append(el("details",{},el("summary",{},"Research notes and sources"),el("p",{class:"warning"},"AI-written notes and URLs require independent verification."),el("pre",{},draft.research_notes||"No source evidence saved; verify company claims independently."),
             el("ul",{class:"sources"},[...new Set((draft.research_notes||"").match(/https:\/\/[^\s<>]+/g)||[])].map(url=>el("li",{},safeLink(url,url)))),
@@ -143,10 +152,17 @@ async function reviewView(){
             else asset.append(el("p",{class:"warning"},"This variant needs a PDF before approval."));
         }
         variant.addEventListener("change",showAsset);showAsset();section.append(asset);
-        section.append(el("div",{class:"actions"},button("Save edits",async()=>{
+        save=button("Save edits",()=>writeReview(async()=>{
+            const savingSerial=editSerial;
             const result=await api("/api/review/"+draft.id,"POST",{action:"edit",revision:draft.revision,subject:subject.value,hook:hook.value,body:body.value,resume_variant_id:Number(variant.value)||null});
-            draft=result.email;dirty.delete(draft.id);approve.disabled=false;warnings.textContent=draft.qc_warnings||"No deterministic warnings; verify all facts.";status.textContent="Revision "+draft.revision+" · Saved, awaiting approval";toast("Saved. Approval is still required.");
-        }),approve,button("Reject",async()=>{await api("/api/review/"+draft.id,"POST",{action:"reject",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Draft rejected.");},"danger")));
+            draft=result.email;
+            if(savingSerial===editSerial)dirty.delete(draft.id);
+            warnings.textContent=draft.qc_warnings||"No deterministic warnings; verify all facts.";
+            status.textContent=dirty.has(draft.id)?"Newer unsaved edits — save before approving":"Revision "+draft.revision+" · Saved, awaiting approval";
+            toast(dirty.has(draft.id)?"Earlier edits saved. Save the newer edits before approving.":"Saved. Approval is still required.");
+        }),"",()=>writing);
+        reject=button("Reject",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"reject",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Draft rejected.");},true),"danger",()=>writing);
+        section.append(el("div",{class:"actions"},save,approve,reject));
         root.append(section);
     }
     paginate(root,"Review",drafts);return root;
@@ -184,6 +200,14 @@ async function settingsView(){
         el("p",{class:"muted"},"Model: "+setup.configuration.model+" · Timezone: "+setup.configuration.timezone+" · Resume mode: "+setup.configuration.resume_mode)));
     const fields={};for(const key of ["full_name","email","phone","linkedin_url","github_url","portfolio_url"])fields[key]=input(setup.profile?.[key],key.includes("url")?"url":key==="email"?"email":"text");
     const context=el("textarea",{value:setup.candidate_context,rows:6});
+    const resumeList=el("div",{}),suppressionList=el("div",{});
+    let listSerial=0;
+    function showLists(data){
+        resumeList.replaceChildren(table(["Name","Keywords","Link"],data.resumes.map(r=>el("tr",{},cell(r.name,true),cell(r.keywords,true),cell(r.resume_url?safeLink(r.resume_url,"Open resume link"):"PDF registered")))));
+        suppressionList.replaceChildren(table(["Address","Reason","Actions"],data.suppressions.map(r=>el("tr",{},cell(r.email),cell(r.reason,true),cell(button("Remove suppression",async()=>{await api("/api/suppressions","DELETE",{email:r.email});await refreshLists();}))))));
+    }
+    async function refreshLists(){const serial=++listSerial;const data=await api("/api/settings");if(serial===listSerial){settingsCache=data;showLists(data);}}
+    showLists(setup);
     root.append(card("Profile and verified candidate facts",Object.entries(fields).map(([key,node])=>field(key.replaceAll("_"," "),node)),field("Candidate facts — include only truthful skills and achievements",context),
         button("Save profile and facts",async()=>{await api("/api/settings","POST",{profile:Object.fromEntries(Object.entries(fields).map(([key,node])=>[key,node.value])),candidate_context:context.value});setup.readiness.profile=true;setup.readiness.context=!!context.value.trim();readiness.textContent=Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"ready":"needed")).join(" · ");toast("Profile and facts saved.");},"primary")));
     const name=input(),keywords=input(),url=input("","url"),file=el("input",{type:"file",accept:".pdf"});
@@ -192,11 +216,10 @@ async function settingsView(){
         button("Register resume",async()=>{
             let data;if(file.files.length){data=new FormData();data.append("file",file.files[0]);data.append("name",name.value);data.append("keywords",keywords.value);data.append("resume_url",url.value);}
             else data={name:name.value,keywords:keywords.value,resume_url:url.value};
-            await api("/api/resumes","POST",data);toast("Resume registered.");await render();
-        }),table(["Name","Keywords","Link"],setup.resumes.map(r=>el("tr",{},cell(r.name,true),cell(r.keywords,true),cell(r.resume_url?safeLink(r.resume_url,"Open resume link"):"PDF registered"))))));
+            await api("/api/resumes","POST",data);toast("Resume registered.");await refreshLists();
+        }),resumeList));
     const address=input("","email"),reason=input();
-    root.append(card("Suppressions",field("Email to suppress",address),field("Reason",reason),button("Suppress address",async()=>{await api("/api/suppressions","POST",{email:address.value,reason:reason.value});await render();}),
-        table(["Address","Reason","Actions"],setup.suppressions.map(r=>el("tr",{},cell(r.email),cell(r.reason,true),cell(button("Remove suppression",async()=>{await api("/api/suppressions","DELETE",{email:r.email});await render();})))))));
+    root.append(card("Suppressions",field("Email to suppress",address),field("Reason",reason),button("Suppress address",async()=>{await api("/api/suppressions","POST",{email:address.value,reason:reason.value});await refreshLists();}),suppressionList));
     if(setup.duplicate_contacts.length)root.append(card("Duplicate contacts to review",
         el("p",{},"Keep the record you intend to use and archive redundant contacts after checking their history. Archiving preserves sent history and cancels unsubmitted drafts."),
         table(["Company","Address","Records","Review"],setup.duplicate_contacts.map(group=>el("tr",{},cell(group.company_name,true),cell(group.email),cell(group.contact_ids),cell(button("Review contacts",async()=>{contactSearch=group.email;contactsOffset=0;await navigate("Contacts");})))))));
@@ -226,7 +249,7 @@ async function pollOperation(){
 }
 const loaders={Dashboard:dashboard,Contacts:contactsView,Companies:companiesView,Review:reviewView,Queue:queueView,Tracking:trackingView,Settings:settingsView,Jobs:jobsView};
 async function loginScreen(){
-    loggedIn=false;
+    loggedIn=false;epoch++;
     const password=input("","password");password.autocomplete="current-password";
     content.replaceChildren(card("Owner sign in",field("Password",password),button("Sign in",async()=>{const r=await api("/api/login","POST",{password:password.value});csrf=r.csrf;await boot();},"primary")));
 }
