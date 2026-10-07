@@ -61,3 +61,11 @@ Remaining work includes validated import/API/setup flows, AI generation, replies
 - Initial Windows CI exposed an OperationalError during simultaneous first stats/settings reads. Per-request connections were repeatedly changing journal mode. WAL is now enabled once during schema initialization, protected by a cross-process schema lock. Read connections never switch journal mode.
 - Added eight concurrent factory/read requests and eight concurrent database startups; both preserve a valid WAL database.
 - Verification: full suite **149 passed** before adding the separate concurrent-startup assertion; migration/API targeted suite **46 passed** with that assertion (150 tests total for the next full run). Linux CI for 135ac3a passed all earlier gates; final cross-platform run follows this fix.
+
+## Final verified application revision
+
+Application source **24b929a** passed **150 tests** locally and on GitHub Windows and Linux. Both CI jobs also passed tracked-source checks, locked dependency installation, pip check, advisory scanning, package creation and isolated runtime startup/worker/database/backup verification. CI: https://github.com/sai161812/email-outreacher/actions/runs/37657473857
+
+The release smoke harness now drains Waitress tasks before closing sockets; its local rerun exits cleanly. The final documentation commit changes the ledger and this harness cleanup; application source remains the verified revision above.
+
+See AUDIT_COMPLETION.md for every A01-A52 item and verification_final.json for the gate summary. Ready for an overall audit, with live-provider/public-deployment checks and three private duplicate-contact groups explicitly remaining for review. No production records were merged/deleted or migrated in place; unrelated local scripts were preserved.

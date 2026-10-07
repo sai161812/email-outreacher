@@ -1,0 +1,148 @@
+{
+  "audit_date": "2026-10-07",
+  "application_commit": "24b929ab4a1619ba185ba8782ab08926c08958b0",
+  "local_regression": {
+    "command": ".venv/Scripts/python.exe -m pytest -q -p no:cacheprovider",
+    "passed": 150,
+    "failed": 0
+  },
+  "ci": {
+    "run_id": 37657473857,
+    "url": "https://github.com/sai161812/email-outreacher/actions/runs/37657473857",
+    "jobs": [
+      {
+        "name": "verify (windows-latest)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install locked development environment",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install Chromium",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check tracked source",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run regression and browser tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Audit installed dependencies",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build clean source release",
+            "conclusion": "success"
+          },
+          {
+            "name": "Verify release in a clean runtime",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "name": "verify (ubuntu-latest)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install locked development environment",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install Chromium",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check tracked source",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run regression and browser tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Audit installed dependencies",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build clean source release",
+            "conclusion": "success"
+          },
+          {
+            "name": "Verify release in a clean runtime",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      }
+    ]
+  },
+  "dependency_check": "passed",
+  "dependency_audit": "No known vulnerabilities found; dependency_final.json records the scan",
+  "source_checks": "passed",
+  "clean_runtime_smoke": "passed locally and on Windows/Linux CI",
+  "legacy_snapshot": {
+    "integrity": "ok",
+    "foreign_key_violations": 0,
+    "history_preserved": true,
+    "original_database_unchanged": true,
+    "duplicate_contact_groups_for_owner_review": 3
+  },
+  "limits": [
+    "No live Gmail SMTP/IMAP or Gemini calls",
+    "Public HTTPS deployment and manual assistive-technology testing remain unverified",
+    "Production database has not been migrated in place",
+    "Three existing duplicate-contact groups require review"
+  ]
+}

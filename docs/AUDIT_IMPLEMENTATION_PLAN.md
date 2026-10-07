@@ -160,7 +160,7 @@ Suggested target test modules: `test_config.py`, `test_migrations.py`, `test_con
 
 ### Completion ledger
 
-All A01-A52 are **Open** as of this audit. Update this table after implementation begins; use one row per item rather than closing entire phases together.
+All A01-A52 were **Open** at the baseline. Current per-item implementation and verification states are maintained in [AUDIT_COMPLETION.md](AUDIT_COMPLETION.md); the original findings above are preserved as historical evidence.
 
 | Issue | State | Change/commit | Verification command and result | Integration limits |
 | --- | --- | --- | --- | --- |

@@ -48,8 +48,9 @@ try:
             assert response.status==200,route
     print("Clean runtime: Waitress read routes, schema, worker and backup passed")
 finally:
-    server.close()
     server.task_dispatcher.shutdown()
+    server.close()
+    thread.join(timeout=5)
 '''
         run("-c",probe)
 
