@@ -52,6 +52,8 @@ The factory also initializes/migrates the database when imported by Flask or Wai
 
 Imports use UTF-8 CSV, optionally with a BOM. Required headers: company_name, contact_email. Optional headers: domain, job_url, job_text, notes, contact_name, contact_title, contact_source. Valid rows persist independently; duplicates are skipped, row errors are reported, and a malformed tail stops further parsing while reporting already imported counts. Defaults: 1 MiB and 10,000 rows. The sample uses reserved example domains; replace the synthetic data before outreach.
 
+Drafting now follows a [recruiter outreach writing policy](docs/DRAFTING_QUALITY.md): clear purpose, one supported proof of fit, natural role keywords and one simple request. Initial pitches target 80-120 words; follow-ups target 30-60, excluding greeting/signature. A bounded quality pass can revise weak output once; remaining suggestions stay visible in Review. Supply your actual target role and concrete project evidence in Settings for better results. Existing drafts are not rewritten automatically.
+
 Email syntax supports ASCII dot-atom local parts and domain labels, at most 254 characters overall and 64 in the local part. Quoted addresses and Unicode mailboxes are unsupported; use an ASCII/punycode address. Identity is trimmed and case-insensitive, without Gmail-specific plus/dot alias rewriting. **Check DNS** is optional, cached for five minutes, and bounded to three seconds; absence of MX is a warning, and DNS errors may be inconclusive. DNS does not prove deliverability.
 
 ## Credentials and configuration

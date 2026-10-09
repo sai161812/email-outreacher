@@ -1,3 +1,24 @@
-Replace this example with facts you can support: your current education, the role you want,
-skills you actually use, and projects you built. Include URLs or measured results only when
-they are accurate. Save your own facts through Settings or in candidate_context.txt.
+Replace this guidance with your own verified facts before saving it in Settings or
+candidate_context.txt. Plain text is fine; use these topics to supply useful evidence:
+
+Target opportunity: the role or work area you want, with the correct level (internship,
+entry-level, experienced, etc.). Say whether you seek a job or a career conversation.
+
+Current background: your accurate education or work status. Include dates, graduation
+year or years of experience only when current and relevant. Do not exaggerate seniority.
+
+Strongest relevant project: what you personally built or contributed, the actual tools
+you used, and one concrete feature, tested behavior or outcome. Clearly label coursework,
+personal projects, prototypes and team contributions. Include metrics only if measured.
+
+Other evidence: one or two additional achievements or projects that may suit different
+roles. Explain what each skill was used for instead of supplying an unsupported skill list.
+
+Constraints: availability, location or work authorization only if you want them mentioned
+and can state them accurately. Omit anything unknown; do not guess.
+
+Proof: a public project/demo URL or portfolio link only when it belongs to your work and
+supports the claims above. Profile links can also be saved in the separate Settings fields.
+
+For a follow-up, explicitly date any genuine update since the original outreach. Otherwise
+the AI should send a short reminder without inventing new progress.
