@@ -127,10 +127,10 @@ def create_app(overrides=None):
     def stats(): return jsonify(summary=tracker.pipeline_summary(),stats=tracker.stats())
     @app.get("/api/settings")
     def settings():
-        from zoneinfo import ZoneInfo
+        candidate=candidate_profile.get_settings()
         readiness={"gemini":bool(config.GEMINI_API_KEY),"gmail":bool(config.GMAIL_ADDRESS and config.GMAIL_APP_PASSWORD),
-                   "profile":bool(candidate_profile.get_profile()),"context":config.CONTEXT_PATH.is_file() and bool(config.CONTEXT_PATH.read_text(encoding="utf8").strip())}
-        return jsonify(profile=candidate_profile.get_profile(),candidate_context=config.CONTEXT_PATH.read_text(encoding="utf8") if config.CONTEXT_PATH.is_file() else "",
+                   "profile":bool(candidate["profile"]),"context":bool(candidate["candidate_context"].strip())}
+        return jsonify(**candidate,
             resumes=resume.list_resume_variants(),suppressions=SuppressionRepository.get_all(),readiness=readiness,
             configuration={"model":config.GEMINI_MODEL,"timezone":config.TIMEZONE_NAME,"daily_cap":config.DAILY_SEND_CAP,
                            "company_weekly_cap":config.MAX_PER_COMPANY_PER_WEEK,"resume_mode":config.RESUME_ATTACH_MODE,
@@ -147,17 +147,8 @@ def create_app(overrides=None):
             if not isinstance(profile,dict) or set(profile)-{"full_name","email","phone","linkedin_url","github_url","portfolio_url"} or "full_name" not in profile:
                 raise ValueError("Invalid profile fields")
             validated_profile=candidate_profile.validate_profile(**profile)
-        if "candidate_context" in data:
-            context=contacts.text(data["candidate_context"],"candidate_context",True,20000)
-            temporary=config.CONTEXT_PATH.with_name(config.CONTEXT_PATH.name+"."+uuid.uuid4().hex+".tmp")
-            temporary.parent.mkdir(parents=True,exist_ok=True)
-            try:
-                temporary.write_text(context,encoding="utf8")
-                temporary.replace(config.CONTEXT_PATH)
-            finally:
-                temporary.unlink(missing_ok=True)
-        if validated_profile is not None:
-            candidate_profile.set_profile(**validated_profile)
+        context=contacts.text(data["candidate_context"],"candidate_context",True,20000) if "candidate_context" in data else None
+        candidate_profile.save_settings(validated_profile,context)
         return jsonify(success=True)
     @app.get("/api/companies")
     def companies(): return jsonify(contacts.list_companies(*page(),request.args.get("search","")[:200]))

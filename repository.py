@@ -299,9 +299,27 @@ class ProfileRepository:
         return one("SELECT * FROM profile WHERE id=1")
     @staticmethod
     def upsert_profile(full_name, email=None, phone=None, linkedin_url=None, github_url=None, portfolio_url=None):
+        ProfileRepository.save_settings(dict(full_name=full_name,email=email,phone=phone,
+            linkedin_url=linkedin_url,github_url=github_url,portfolio_url=portfolio_url))
+    @staticmethod
+    def get_settings():
         with get_connection() as conn:
+            # Both reads must observe the same committed candidate snapshot.
+            conn.execute("BEGIN")
+            profile=conn.execute("SELECT * FROM profile WHERE id=1").fetchone()
+            facts=conn.execute("SELECT value FROM settings WHERE key='candidate_context'").fetchone()
+        context=facts["value"] if facts else (config.CONTEXT_PATH.read_text(encoding="utf8") if config.CONTEXT_PATH.is_file() else "")
+        return {"profile":dict(profile) if profile else None,"candidate_context":context}
+    @staticmethod
+    def save_settings(profile=None, candidate_context=None):
+        with get_connection(immediate=True) as conn:
+            if candidate_context is not None:
+                conn.execute("INSERT INTO settings(key,value) VALUES ('candidate_context',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(candidate_context,))
+            if profile is None:
+                return
             conn.execute("""INSERT INTO profile(id,full_name,email,phone,linkedin_url,github_url,portfolio_url)
                 VALUES (1,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET full_name=excluded.full_name,email=excluded.email,
                 phone=excluded.phone,linkedin_url=excluded.linkedin_url,github_url=excluded.github_url,
                 portfolio_url=excluded.portfolio_url,updated_at=?""",
-                (full_name,email,phone,linkedin_url,github_url,portfolio_url,timestamp()))
+                (profile["full_name"],profile.get("email"),profile.get("phone"),profile.get("linkedin_url"),
+                 profile.get("github_url"),profile.get("portfolio_url"),timestamp()))

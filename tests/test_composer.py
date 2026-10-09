@@ -6,6 +6,17 @@ import pytest
 import config
 import composer
 import candidate_profile
+
+def test_generation_uses_the_profile_captured_with_its_facts(ready,monkeypatch):
+    company,person=ready
+    def generate(*args):
+        candidate_profile.set_profile("Changed during generation")
+        return {"subject":"Backend opportunity","hook":"Relevant project","body":"Built a Python dashboard. Open to a chat?","research_notes":"Verify company details"}
+    monkeypatch.setattr(composer,"compose_email",generate)
+    eid=composer.compose_and_store(company,person,composer.candidate_context())
+    body=EmailRepository.get_by_id(eid)["body"]
+    assert "Best,\nCandidate" in body
+    assert "Changed during generation" not in body
 import resume
 from repository import EmailRepository
 from errors import Conflict,ProviderError

@@ -176,14 +176,14 @@ def _build_user_prompt(company,contact,candidate_context):
 def compose_email(company,contact,candidate_context):
     return _generate(_build_user_prompt(company,contact,candidate_context),EmailDraft,SYSTEM_PROMPT,True)
 
-def _build_signature(resume_url=None):
-    profile=candidate_profile.get_profile()
+def _build_signature(profile=None):
+    profile=profile if profile is not None else candidate_profile.get_profile()
     if not profile or not profile["full_name"].strip():
         raise ValueError("Set up your profile before drafting")
     links=list(dict.fromkeys(profile[k] for k in ("portfolio_url","github_url","linkedin_url") if profile.get(k)))[:2]
     return "\n".join(["Best,",profile["full_name"]]+([" | ".join(links)] if links else []))
 
-def _body(pitch,contact):
+def _body(pitch,contact,profile=None):
     name=(contact.get("name") or "").split()
     if not name: greeting="Hello,"
     elif name[0].rstrip(".").casefold() in {"dr","prof","professor","mr","ms","mrs","mx"} or any(part.casefold() in {"team","recruitment","hr"} for part in name):
@@ -192,12 +192,13 @@ def _body(pitch,contact):
     normalized="\n".join(line.rstrip() for line in qc.pitch_text(pitch).splitlines())
     if not normalized:
         raise ProviderError("Generated draft contains no pitch after removing its greeting/signature")
-    return f"{greeting}\n\n{normalized}\n\n{_build_signature()}"
+    return f"{greeting}\n\n{normalized}\n\n{_build_signature(profile)}"
 
 def candidate_context():
-    if not config.CONTEXT_PATH.is_file():
+    context=candidate_profile.get_settings()["candidate_context"].strip()
+    if not context:
         raise ValueError("Add verified candidate facts in Settings before drafting")
-    return config.CONTEXT_PATH.read_text(encoding="utf8").strip()
+    return context
 
 def _reserve(key):
     token=uuid.uuid4().hex
@@ -227,7 +228,14 @@ def _preflight(company_id,contact_id,context,variant_id):
         resume.delivery_asset(variant_id)
     return company,contact
 
-def compose_and_store(company_id,contact_id,candidate_context,resume_variant_id=None):
+def compose_and_store(company_id,contact_id,candidate_context=None,resume_variant_id=None):
+    candidate=candidate_profile.get_settings()
+    if candidate_context is None:
+        candidate_context=candidate["candidate_context"]
+    profile=candidate["profile"]
+    if not profile:
+        raise ValueError("Set up your profile before drafting")
+    _build_signature(profile)
     company,contact=_preflight(company_id,contact_id,candidate_context,resume_variant_id)
     key="generation:"+contact["email"].strip().lower()
     token=_reserve(key)
@@ -238,7 +246,7 @@ def compose_and_store(company_id,contact_id,candidate_context,resume_variant_id=
                 raise Conflict("Recipient already has an active or submitted outreach")
         generated=compose_email(company,contact,candidate_context)
         result=EmailDraft.model_validate(generated).model_dump()
-        body=_body(result["body"],contact)
+        body=_body(result["body"],contact,profile)
         if qc.blockers(result["subject"],body):
             raise ProviderError("Generated draft failed content checks")
         # Revalidate suppression/relationship following the slow provider call.
@@ -265,7 +273,12 @@ def compose_follow_up_and_store(original_email_id):
     if not original:
         from errors import NotFound
         raise NotFound("Original email not found")
-    context=candidate_context()
+    candidate=candidate_profile.get_settings()
+    context=candidate["candidate_context"]
+    profile=candidate["profile"]
+    if not profile:
+        raise ValueError("Set up your profile before drafting")
+    _build_signature(profile)
     _,contact=_preflight(original["company_id"],original["contact_id"],context,original["resume_variant_id"])
     root=original["thread_root_id"] or original["id"]
     key=f"generation:followup:{root}"
@@ -277,7 +290,7 @@ def compose_follow_up_and_store(original_email_id):
         generated=compose_follow_up(original_email_id,context)
         result=FollowUpDraft.model_validate(generated).model_dump()
         subject=original["subject"] if original["subject"].lower().startswith("re:") else "Re: "+original["subject"]
-        body=_body(result["body"],contact)
+        body=_body(result["body"],contact,profile)
         if qc.blockers(subject,body):
             raise ProviderError("Generated follow-up failed content checks")
         with get_connection() as conn:

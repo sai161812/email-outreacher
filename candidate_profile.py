@@ -12,3 +12,11 @@ def set_profile(full_name,email=None,phone=None,linkedin_url=None,github_url=Non
 
 def get_profile():
     return ProfileRepository.get_profile()
+
+def get_settings():
+    return ProfileRepository.get_settings()
+
+def save_settings(profile=None,candidate_context=None):
+    validated=validate_profile(**profile) if profile is not None else None
+    context=text(candidate_context,"candidate_context",True,20000) if candidate_context is not None else None
+    ProfileRepository.save_settings(validated,context)

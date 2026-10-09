@@ -54,7 +54,7 @@ def _dispatch(kind,payload,progress):
         return {"matches":replies.check_replies()}
     import composer
     if kind=="compose":
-        return {"id":composer.compose_and_store(candidate_context=composer.candidate_context(),**payload)}
+        return {"id":composer.compose_and_store(**payload)}
     return {"id":composer.compose_follow_up_and_store(payload["email_id"])}
 
 def process_next():

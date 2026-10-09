@@ -93,6 +93,42 @@ def test_invalid_profile_does_not_overwrite_context(client):
     assert response.status_code==400
     assert config.CONTEXT_PATH.read_text(encoding="utf8")=="Original facts"
 
+def test_profile_database_failure_does_not_save_new_facts(client):
+    from db import get_connection
+    assert post(client,"/api/settings",{"profile":{"full_name":"Original"},"candidate_context":"Original facts"}).status_code==200
+    with get_connection() as conn:
+        conn.execute("""CREATE TRIGGER reject_profile_save BEFORE UPDATE ON profile
+            BEGIN SELECT RAISE(ABORT,'synthetic storage failure'); END""")
+    response=post(client,"/api/settings",{"profile":{"full_name":"Replacement"},"candidate_context":"Replacement facts"})
+    assert response.status_code==409
+    saved=client.get("/api/settings").get_json()
+    assert saved["profile"]["full_name"]=="Original"
+    assert saved["candidate_context"]=="Original facts"
+
+def test_saved_facts_survive_file_changes_and_database_backup(client,tmp_path):
+    import sqlite3
+    from db import backup_database
+    import composer
+    config.CONTEXT_PATH.write_text("Legacy file facts",encoding="utf8")
+    assert client.get("/api/settings").get_json()["candidate_context"]=="Legacy file facts"
+    assert post(client,"/api/settings",{"profile":{"full_name":"Candidate"},"candidate_context":"Saved verified facts"}).status_code==200
+    config.CONTEXT_PATH.write_text("Later file edit",encoding="utf8")
+    assert composer.candidate_context()=="Saved verified facts"
+    assert client.get("/api/settings").get_json()["readiness"]["context"] is True
+    with sqlite3.connect(backup_database(tmp_path/"candidate-backup.sqlite")) as conn:
+        assert conn.execute("SELECT full_name FROM profile").fetchone()[0]=="Candidate"
+        assert conn.execute("SELECT value FROM settings WHERE key='candidate_context'").fetchone()[0]=="Saved verified facts"
+
+def test_partial_settings_updates_preserve_the_other_half(client):
+    assert post(client,"/api/settings",{"profile":{"full_name":"Original"},"candidate_context":"Original facts"}).status_code==200
+    assert post(client,"/api/settings",{"profile":{"full_name":"Updated"}}).status_code==200
+    saved=client.get("/api/settings").get_json()
+    assert saved["candidate_context"]=="Original facts"
+    assert post(client,"/api/settings",{"candidate_context":"Updated facts"}).status_code==200
+    saved=client.get("/api/settings").get_json()
+    assert saved["profile"]["full_name"]=="Updated"
+    assert saved["candidate_context"]=="Updated facts"
+
 def test_unsent_reply_is_rejected(client,contact):
     company,person=contact
     eid=EmailRepository.create(company,person,None,"H","S","B",None)

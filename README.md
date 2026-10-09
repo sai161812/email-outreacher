@@ -97,6 +97,8 @@ Funnel rates count **sent messages, including follow-ups**, not unique people. S
 
 Backup uses SQLite's backup API, including committed WAL data. It never overwrites an existing file. Protect backups like the live database.
 
+Saving your profile and verified facts in Settings stores them together in SQLite; database backups include both. Until facts are first saved in Settings, an existing `CONTEXT_PATH` file remains the fallback source. After saving, edit facts in Settings; the fallback file is preserved and no longer overrides the saved facts. Resume PDFs and credentials still need separate protected backups.
+
 To restore: stop **both** processes; preserve the current database with the backup command; restore the desired snapshot to a **new filename**, set OUTREACH_DB_PATH to that file, then run manage.py init and manage.py check before restarting. This avoids reusing stale WAL/SHM files. Do not copy a live SQLite main file alone or overwrite an open database. Test recovery using a separate directory before relying on a backup.
 
 ## Access controls
