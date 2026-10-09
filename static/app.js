@@ -65,7 +65,7 @@ async function queued(path,data={}){
 }
 async function navigate(next){
     await Promise.allSettled([...pendingWrites]);
-    if(dirty.size&&!confirm("Leave without saving your draft edits?"))return;
+    if(dirty.size&&!confirm("Leave without saving your edits?"))return;
     dirty.clear();view=next;
     nav.querySelectorAll("button").forEach(b=>b.setAttribute("aria-current",b.textContent===view?"page":"false"));
     await render();
@@ -87,12 +87,19 @@ async function dashboard(){
     return root;
 }
 async function contactsView(){
-    const [people,companies]=await Promise.all([api("/api/contacts?limit=100&offset="+contactsOffset+"&search="+encodeURIComponent(contactSearch)),api("/api/companies")]);
+    const [people,companies,setup]=await Promise.all([api("/api/contacts?limit=100&offset="+contactsOffset+"&search="+encodeURIComponent(contactSearch)),api("/api/companies"),api("/api/settings")]);
+    const draftResume=select([["auto","Automatic match"],["none","No resume"],...setup.resumes.map(r=>[r.id,r.name])],"auto");
+    function draftFor(person){
+        const data={company_id:person.company_id,contact_id:person.id};
+        if(draftResume.value!=="auto")data.resume_variant_id=draftResume.value==="none"?null:Number(draftResume.value);
+        return queued("/api/compose",data);
+    }
     const search=input(contactSearch);search.setAttribute("aria-label","Search contacts");
     const file=el("input",{type:"file",accept:".csv","aria-label":"Import contacts CSV"});
     file.addEventListener("change",async()=>{if(!file.files.length)return;const form=new FormData();form.append("file",file.files[0]);try{const r=await api("/api/contacts/import","POST",form);toast(r.contacts_created+" contacts added; "+r.duplicates_skipped+" duplicates skipped.");if(r.errors.length)toast(r.errors.map(e=>"Row "+e.row+": "+e.error).join("; "),true);await render();}catch(e){toast(e.message,true);}finally{file.value="";}});
     const root=el("div",{},title("Contacts",button("Add contact",()=>contactForm(companies)),button("Search",async()=>{contactSearch=search.value;contactsOffset=0;await render();})),field("Search name, company or email",search),field("Import CSV",file));
-    root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"—",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>queued("/api/compose",{company_id:p.company_id,contact_id:p.id})),button("Edit",()=>contactForm(companies,p)),button("Check DNS",async()=>{const result=await api("/api/contacts/"+p.id+"/validate","POST",{});toast((result.warning||"Domain accepts mail in DNS")+". "+result.note,!!result.warning);})))))));
+    root.append(field("Resume for new drafts",draftResume));
+    root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"—",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>draftFor(p)),button("Edit",()=>contactForm(companies,p)),button("Check DNS",async()=>{const result=await api("/api/contacts/"+p.id+"/validate","POST",{});toast((result.warning||"Domain accepts mail in DNS")+". "+result.note,!!result.warning);})))))));
     if(!people.length)root.append(el("p",{},"No contacts found. Add a company first, or import the sample CSV."));
     root.append(el("div",{class:"actions"},button("Previous",async()=>{contactsOffset=Math.max(0,contactsOffset-100);await render();}),button("Next",async()=>{if(people.length===100){contactsOffset+=100;await render();}})));
     return root;
@@ -200,6 +207,8 @@ async function settingsView(){
         el("p",{class:"muted"},"Model: "+setup.configuration.model+" · Timezone: "+setup.configuration.timezone+" · Resume mode: "+setup.configuration.resume_mode)));
     const fields={};for(const key of ["full_name","email","phone","linkedin_url","github_url","portfolio_url"])fields[key]=input(setup.profile?.[key],key.includes("url")?"url":key==="email"?"email":"text");
     const context=el("textarea",{value:setup.candidate_context,rows:6});
+    let editSerial=0;
+    for(const node of [...Object.values(fields),context])node.addEventListener("input",()=>{editSerial++;dirty.add("settings");});
     const resumeList=el("div",{}),suppressionList=el("div",{});
     let listSerial=0;
     function showLists(data){
@@ -209,7 +218,15 @@ async function settingsView(){
     async function refreshLists(){const serial=++listSerial;const data=await api("/api/settings");if(serial===listSerial){settingsCache=data;showLists(data);}}
     showLists(setup);
     root.append(card("Profile and verified candidate facts",Object.entries(fields).map(([key,node])=>field(key.replaceAll("_"," "),node)),field("Candidate facts — include only truthful skills and achievements",context),
-        button("Save profile and facts",async()=>{await api("/api/settings","POST",{profile:Object.fromEntries(Object.entries(fields).map(([key,node])=>[key,node.value])),candidate_context:context.value});setup.readiness.profile=true;setup.readiness.context=!!context.value.trim();readiness.textContent=Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"ready":"needed")).join(" · ");toast("Profile and facts saved.");},"primary")));
+        button("Save profile and facts",async()=>{
+            const savingSerial=editSerial;
+            const data={profile:Object.fromEntries(Object.entries(fields).map(([key,node])=>[key,node.value])),candidate_context:context.value};
+            await api("/api/settings","POST",data);
+            if(savingSerial===editSerial)dirty.delete("settings");
+            setup.readiness.profile=true;setup.readiness.context=!!data.candidate_context.trim();
+            readiness.textContent=Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"ready":"needed")).join(" · ");
+            toast(dirty.has("settings")?"Profile and facts saved. Newer edits remain unsaved.":"Profile and facts saved.");
+        },"primary")));
     const name=input(),keywords=input(),url=input("","url"),file=el("input",{type:"file",accept:".pdf"});
     root.append(card("Resume variants",el("p",{},"Upload PDFs you wrote, or register a public HTTPS link. Delivery uses the configured mode."),
         field("Resume name",name),field("Matching keywords, separated by commas",keywords),field("PDF",file),field("HTTPS resume link (optional for attachments)",url),
@@ -258,7 +275,11 @@ async function boot(){
     const session=await api("/api/session");csrf=session.csrf;
     nav.replaceChildren(...pages.map(page=>{const b=button(page,()=>navigate(page));b.setAttribute("aria-current",page===view?"page":"false");return b;}));
     const logout=document.getElementById("logout");logout.hidden=!session.owner_mode;
-    logout.onclick=async()=>{try{await api("/api/logout","POST",{});await boot();}catch(e){toast(e.message,true);}};
+    logout.onclick=async()=>{try{
+        await Promise.allSettled([...pendingWrites]);
+        if(dirty.size&&!confirm("Sign out without saving your edits?"))return;
+        await api("/api/logout","POST",{});dirty.clear();await boot();
+    }catch(e){toast(e.message,true);}};
     if(!session.authenticated){await loginScreen();return;}
     loggedIn=true;
     await render();

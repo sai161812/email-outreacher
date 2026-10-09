@@ -96,6 +96,65 @@ def test_settings_mutations_preserve_unsaved_profile(browser_app):
     expect(page.get_by_label("full name",exact=True)).to_have_value("Unsaved candidate")
     assert errors==[]
 
+def test_navigation_warns_before_discarding_unsaved_settings(browser_app):
+    page,url,_,errors=browser_app
+    page.goto(url)
+    open_view(page,"Settings")
+    page.get_by_label("full name",exact=True).fill("Unsaved candidate")
+    dialogs=[]
+    def dismiss(dialog):
+        dialogs.append(dialog.message)
+        dialog.dismiss()
+    page.on("dialog",dismiss)
+    open_view(page,"Contacts")
+    expect(page.get_by_role("navigation").get_by_role("button",name="Contacts",exact=True)).not_to_have_attribute("aria-busy","true")
+    expect(page.get_by_label("full name",exact=True)).to_have_value("Unsaved candidate")
+    assert len(dialogs)==1
+    assert errors==[]
+
+def test_newer_settings_edits_remain_unsaved_after_a_slow_save(browser_app):
+    page,url,_,errors=browser_app
+    page.goto(url)
+    open_view(page,"Settings")
+    page.get_by_label("full name",exact=True).fill("Saved candidate")
+    page.get_by_label("Candidate facts",exact=False).fill("Saved facts")
+    held=[]
+    page.route("**/api/settings",lambda route:held.append(route) if route.request.method=="POST" else route.continue_())
+    page.get_by_role("button",name="Save profile and facts").click()
+    page.get_by_label("Candidate facts",exact=False).fill("Newer unsaved facts")
+    held.pop().continue_()
+    expect(page.get_by_role("button",name="Save profile and facts")).to_be_enabled()
+    expect(page.get_by_text("Newer edits remain unsaved.",exact=False)).to_be_visible()
+    dialogs=[]
+    def dismiss(dialog):
+        dialogs.append(dialog.message)
+        dialog.dismiss()
+    page.on("dialog",dismiss)
+    open_view(page,"Contacts")
+    expect(page.get_by_role("navigation").get_by_role("button",name="Contacts",exact=True)).not_to_have_attribute("aria-busy","true")
+    expect(page.get_by_label("Candidate facts",exact=False)).to_have_value("Newer unsaved facts")
+    assert len(dialogs)==1
+    assert errors==[]
+
+def test_draft_without_resume_is_available_when_automatic_asset_is_unusable(browser_app,contact):
+    import candidate_profile,resume
+    page,url,_,errors=browser_app
+    candidate_profile.save_settings({"full_name":"Candidate"},"Built a Python dashboard.")
+    resume.add_resume_variant("Link only","python",resume_url="https://example.test/cv.pdf")
+    page.goto(url)
+    open_view(page,"Contacts")
+    page.get_by_label("Resume for new drafts",exact=True).select_option("none")
+    with page.expect_response(lambda response:response.url.endswith("/api/compose")) as queued:
+        page.get_by_role("button",name="Draft",exact=True).click()
+    assert queued.value.status==202
+    assert queued.value.json()["payload"]["resume_variant_id"] is None
+    assert jobs.process_next()
+    job=jobs.list_jobs()[0]
+    assert job["status"]=="complete"
+    from repository import EmailRepository
+    assert EmailRepository.get_by_id(job["result"]["id"])["resume_variant_id"] is None
+    assert errors==[]
+
 def test_expired_session_cannot_render_a_stale_dashboard(browser_app):
     page,url,_,errors=browser_app
     page.goto(url)
