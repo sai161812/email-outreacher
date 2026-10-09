@@ -289,7 +289,11 @@ def compose_follow_up_and_store(original_email_id):
             followups.check(conn,proposed)
         generated=compose_follow_up(original_email_id,context)
         result=FollowUpDraft.model_validate(generated).model_dump()
-        subject=original["subject"] if original["subject"].lower().startswith("re:") else "Re: "+original["subject"]
+        # Thread headers provide linkage even when a prefix would overflow the
+        # subject limit. Preserve the reviewed original rather than truncate it.
+        subject=original["subject"]
+        if not subject.lower().startswith("re:") and len(subject)<=196:
+            subject="Re: "+subject
         body=_body(result["body"],contact,profile)
         if qc.blockers(subject,body):
             raise ProviderError("Generated follow-up failed content checks")

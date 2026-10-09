@@ -87,7 +87,11 @@ def run_send_batch(dry_run=False, force=False, progress=None):
                     continue
                 if dry_run:
                     with get_connection(immediate=True) as conn:
-                        row=dict(conn.execute("SELECT * FROM emails WHERE id=?",(eid,)).fetchone())
+                        latest=conn.execute("SELECT * FROM emails WHERE id=?",(eid,)).fetchone()
+                        if not latest or latest["status"]!="approved" or latest["sent_at"]:
+                            summary.append({"id":eid,"status":"skipped","reason":"Already claimed or changed"})
+                            continue
+                        row=dict(latest)
                         delivery._validate(conn,row)
                         delivery._quota(conn,row["company_id"],projected=projected)
                     projected.append(row["company_id"])

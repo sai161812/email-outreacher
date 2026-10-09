@@ -27,6 +27,14 @@ def test_preview_reserves_projected_batch_capacity(contact,draft,monkeypatch):
         assert conn.execute("SELECT COUNT(*) FROM send_attempts").fetchone()[0]==0
     assert EmailRepository.get_by_id(draft)["status"]=="approved"
 
+def test_preview_skips_a_message_sent_after_the_queue_was_loaded(draft,mail,monkeypatch):
+    reviewer.approve(draft)
+    stale_queue=sender.get_approved_queue()
+    assert sender.run_send_batch()[0]["status"]=="sent"
+    monkeypatch.setattr(sender,"get_approved_queue",lambda:stale_queue)
+    assert sender.run_send_batch(dry_run=True)[0]["status"]=="skipped"
+    assert mail.sendmail.call_count==1
+
 def test_all_candidates_reported_when_transport_fails(contact,draft,mail):
     reviewer.approve(draft);second(contact)
     mail.starttls.side_effect=ConnectionError("private")

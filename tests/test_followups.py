@@ -33,6 +33,19 @@ def test_early_followup_blocked(contact):
     with get_connection() as conn,pytest.raises(Conflict,match="not due"):
         followups.check(conn,{**original,"follow_up_to_email_id":parent})
 
+@pytest.mark.parametrize("length",[196,197,200])
+def test_maximum_length_subject_can_still_be_followed_up(contact,monkeypatch,length):
+    import candidate_profile,composer
+    candidate_profile.set_profile("Candidate")
+    config.CONTEXT_PATH.write_text("Built a Python dashboard.",encoding="utf8")
+    parent=sent(contact)
+    subject="A"*length
+    with get_connection() as conn:
+        conn.execute("UPDATE emails SET subject=? WHERE id=?",(subject,parent))
+    monkeypatch.setattr(composer,"compose_follow_up",lambda *args:{"subject":"Ignored subject","body":"Built a Python dashboard. Open to a chat?"})
+    child=composer.compose_follow_up_and_store(parent)
+    assert EmailRepository.get_by_id(child)["subject"]==("Re: "+subject if length<=196 else subject)
+
 def test_reply_cancels_queued_followup(contact):
     parent=sent(contact)
     original=EmailRepository.get_by_id(parent)
