@@ -1,0 +1,170 @@
+{
+  "audit_date": "2026-10-09",
+  "baseline_commit": "0b57c1a122db4ef79a829bfff13edd716253dbd4",
+  "application_commit": "b1b1e26f709247076bc71303dab5a4889cfc4bfe",
+  "baseline_tests": 209,
+  "local_regression": {
+    "command": ".venv/Scripts/python.exe -m pytest -q",
+    "passed": 223,
+    "failed": 0,
+    "duration_seconds": 40.03,
+    "browser_cases": 11
+  },
+  "added_regression_cases": 14,
+  "reproduced_issues_fixed": 7,
+  "source_checks": "passed",
+  "dependency_check": "No broken requirements found",
+  "dependency_audit": "No known vulnerabilities found",
+  "clean_runtime_smoke": "passed: isolated hashed runtime install, Waitress read routes, schema v2 initialization/check, worker --once and SQLite-consistent backup",
+  "source_package": "dist/email-outreacher-b1b1e26f7092.zip",
+  "implementation_commits": [
+    "834ccc1",
+    "1bc7e19",
+    "c0ae2f1",
+    "b1b1e26"
+  ],
+  "candidate_settings": {
+    "storage": "Profile and saved facts commit together in SQLite",
+    "file_compatibility": "CONTEXT_PATH remains a preserved fallback until facts are saved in Settings",
+    "generation": "Capture identity/facts before provider calls"
+  },
+  "credential_readiness": {
+    "gemini_configured": false,
+    "gmail_credentials_configured": false
+  },
+  "limits": [
+    "No live AI calls, email submission or mailbox access; providers are synthetic in tests",
+    "Private user database and candidate files were not changed; earlier legacy duplicate groups still require owner review",
+    "Recruiter response improvement and inbox placement are not measured",
+    "Public deployment and visual redesign are outside this local workflow acceptance",
+    "Unrelated untracked fix.py and rewrite.py were not executed or committed"
+  ],
+  "ci": {
+    "run_id": 37949776032,
+    "url": "https://github.com/sai161812/email-outreacher/actions/runs/37949776032",
+    "jobs": [
+      {
+        "name": "verify (windows-latest)",
+        "id": 113885226151,
+        "conclusion": "success",
+        "passed": 223,
+        "duration_seconds": 64.19,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install locked development environment",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install Chromium",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check tracked source",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run regression and browser tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Audit installed dependencies",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build clean source release",
+            "conclusion": "success"
+          },
+          {
+            "name": "Verify release in a clean runtime",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "name": "verify (ubuntu-latest)",
+        "id": 113885226264,
+        "conclusion": "success",
+        "passed": 223,
+        "duration_seconds": 32.24,
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install locked development environment",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install Chromium",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check tracked source",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run regression and browser tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Audit installed dependencies",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build clean source release",
+            "conclusion": "success"
+          },
+          {
+            "name": "Verify release in a clean runtime",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      }
+    ]
+  }
+}

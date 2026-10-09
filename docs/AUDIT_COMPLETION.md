@@ -6,6 +6,8 @@ The 9 October recruiter-drafting update on `6052781` passed **208 tests** locall
 
 `Verified` below means the implemented application behavior passed the named isolated checks. Provider transports are fake. Existing private data requiring an owner decision is listed separately and is not silently changed.
 
+The subsequent overall workflow review on `b1b1e26` passed **223 tests** locally and on Windows/Linux CI, including all source, dependency and isolated-release gates in [run 37949776032](https://github.com/sai161812/email-outreacher/actions/runs/37949776032). It repaired seven additional settings, drafting, preview, follow-up, browser and tracking-metric defects in four commits. See [WORKFLOW_AUDIT.md](WORKFLOW_AUDIT.md) and `audit/2026-10-09/workflow_verification.json` for the current evidence and remaining live-account acceptance. The original issue ledger below retains its historical results.
+
 | Issue | State | Implemented behavior | Evidence | Commits |
 | --- | --- | --- | --- | --- |
 | A01 | Verified | Regression suite collects and exercises real service contracts | pytest: 150 passed | f0b3959 |
