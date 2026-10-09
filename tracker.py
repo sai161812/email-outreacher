@@ -41,14 +41,16 @@ def stats():
     variants={r["id"]:r["name"] for r in ResumeRepository.get_all()}
     metrics={}
     weekdays={d:{"sent":0,"replied":0,"interviews":0,"offers":0} for d in ("Mon","Tue","Wed","Thu","Fri","Sat","Sun")}
-    for row in rows("SELECT * FROM emails WHERE sent_at IS NOT NULL"):
+    for row in rows("""SELECT e.*,EXISTS(SELECT 1 FROM events v WHERE v.email_id=e.id
+        AND v.kind IN ('interview_scheduled','interview_completed')) recorded_interview
+        FROM emails e WHERE e.sent_at IS NOT NULL"""):
         key=row["resume_variant_id"]
         entry=metrics.setdefault(key,{"sent":0,"replied":0,"interviews":0,"offers":0})
         parsed=datetime.fromisoformat(row["sent_at"].replace("Z","+00:00"))
         if not parsed.tzinfo: parsed=parsed.replace(tzinfo=timezone.utc)
         day=parsed.astimezone(config.TIMEZONE).strftime("%a")
         flags={"sent":1,"replied":int(row["status"] in {"replied","interview_scheduled","interview_completed","offer","no_offer"}),
-               "interviews":int(row["status"] in {"interview_scheduled","interview_completed","offer","no_offer"}),"offers":int(row["status"]=="offer")}
+               "interviews":int(row["recorded_interview"] or row["status"] in {"interview_scheduled","interview_completed"}),"offers":int(row["status"]=="offer")}
         for name,value in flags.items():
             entry[name]+=value
             weekdays[day][name]+=value
@@ -56,5 +58,6 @@ def stats():
         return {**entry,**{name+"_rate":round(entry[field]/entry["sent"]*100,1) if entry["sent"] else 0
                           for name,field in (("reply","replied"),("interview","interviews"),("offer","offers"))}}
     return {"denominator":"sent messages (including follow-ups)",
+            "interview_basis":"Recorded interview events or current interview status; terminal outcomes alone do not establish an interview",
             "by_variant":[{"id":key,"name":variants.get(key,"Unassigned"),"variant":variants.get(key,"Unassigned"),**rates(value)} for key,value in metrics.items()],
             "by_weekday":[{"day":day,"weekday":day,**rates(value)} for day,value in weekdays.items()]}

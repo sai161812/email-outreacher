@@ -66,6 +66,23 @@ def test_sent_outcomes_are_cumulative(contact):
     entry=tracker.stats()["by_variant"][0]
     assert entry["sent"]==entry["replied"]==entry["interviews"]==entry["offers"]==1
 
+@pytest.mark.parametrize("outcome",["no_offer","offer"])
+def test_direct_terminal_outcome_does_not_invent_an_interview(contact,outcome):
+    parent=sent(contact)
+    getattr(tracker,"mark_"+outcome)(parent)
+    entry=tracker.stats()["by_variant"][0]
+    assert entry["sent"]==entry["replied"]==1
+    assert entry["interviews"]==0
+    assert entry["offers"]==int(outcome=="offer")
+
+def test_interview_history_remains_counted_after_a_rejection(contact):
+    parent=sent(contact)
+    tracker.mark_interview_scheduled(parent)
+    tracker.mark_no_offer(parent)
+    entry=tracker.stats()["by_variant"][0]
+    assert entry["interviews"]==1
+    assert entry["offers"]==0
+
 def test_persistence_rechecks_reply_after_generation(contact):
     parent=sent(contact)
     original=EmailRepository.get_by_id(parent)
