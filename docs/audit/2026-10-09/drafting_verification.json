@@ -1,0 +1,194 @@
+{
+  "audit_date": "2026-10-09",
+  "application_commit": "bed935ebb9eccd15aaa6b25ef8ccb1ad0bc84af7",
+  "local_regression": {
+    "command": ".venv/Scripts/python.exe -m pytest -q",
+    "passed": 209,
+    "failed": 0,
+    "duration_seconds": 33.75
+  },
+  "previous_regression_count": 167,
+  "source_checks": "passed",
+  "dependency_check": "No broken requirements found",
+  "dependency_audit": "No known vulnerabilities found",
+  "clean_runtime_smoke": "passed; isolated locked install of committed source ZIP, Waitress, schema init/check, worker --once and SQLite backup",
+  "source_package": "dist/email-outreacher-bed935ebb9ec.zip",
+  "writing_policy": {
+    "initial_pitch_word_target": [
+      80,
+      120
+    ],
+    "follow_up_pitch_word_target": [
+      30,
+      60
+    ],
+    "max_ai_revisions": 1,
+    "max_transient_retries": 1,
+    "max_generation_calls": 3,
+    "sdk_retry_attempts": 1,
+    "manual_approval_required": true,
+    "existing_drafts_rewritten": false,
+    "follow_up_subject": "Preserve original thread; initial style-length limits do not trigger revisions"
+  },
+  "reproduced_provider_bug": "Valid JSON text was rejected when the SDK parsed field was absent; regression failed before the fix and now uses one request",
+  "illustrative_example": {
+    "synthetic": true,
+    "pitch_words": 84,
+    "style_warnings": []
+  },
+  "gemini_key_configured": false,
+  "limits": [
+    "No live Gemini generation or paid AI requests; tests use synthetic provider responses",
+    "No measured recruiter response or acceptance improvement",
+    "Deterministic writing checks are suggestions, not semantic fact or grammar verification; source claims require manual review",
+    "Existing saved drafts and private candidate facts were not rewritten"
+  ],
+  "implementation_commits": [
+    "60527811f3a066499d581e0ac7249e0cebf7fd5f",
+    "bed935ebb9eccd15aaa6b25ef8ccb1ad0bc84af7"
+  ],
+  "previous_ci": {
+    "run_id": 37945139259,
+    "url": "https://github.com/sai161812/email-outreacher/actions/runs/37945139259",
+    "passed": 208,
+    "jobs": [
+      {
+        "name": "verify (windows-latest)",
+        "conclusion": "success"
+      },
+      {
+        "name": "verify (ubuntu-latest)",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "ci": {
+    "run_id": 37945988485,
+    "url": "https://github.com/sai161812/email-outreacher/actions/runs/37945988485",
+    "jobs": [
+      {
+        "name": "verify (ubuntu-latest)",
+        "id": 113872241445,
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install locked development environment",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install Chromium",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check tracked source",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run regression and browser tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Audit installed dependencies",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build clean source release",
+            "conclusion": "success"
+          },
+          {
+            "name": "Verify release in a clean runtime",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "name": "verify (windows-latest)",
+        "id": 113872241798,
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install locked development environment",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install Chromium",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check tracked source",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run regression and browser tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Audit installed dependencies",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build clean source release",
+            "conclusion": "success"
+          },
+          {
+            "name": "Verify release in a clean runtime",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      }
+    ]
+  },
+  "credential_readiness": {
+    "env_file_exists": false,
+    "gemini_key_configured": false,
+    "gmail_credentials_configured": false
+  }
+}

@@ -1,8 +1,8 @@
 # Product acceptance and startup
 
-The local single-owner application passed functional acceptance on source commit **63dd14f**: **167 tests**, including real Chromium workflows against fake providers, source checks, dependency checks and an isolated installation of the committed source ZIP. The release smoke check exercised Waitress, schema initialization/integrity, worker startup and SQLite backup. No real emails or paid AI requests were used.
+The local single-owner application passed the updated acceptance suite on source commit **bed935e** (9 October 2026): **209 tests**, including real Chromium workflows against fake providers, source checks, dependency checks and an isolated installation of the committed source ZIP. The release smoke check exercised Waitress, schema initialization/integrity, worker startup and SQLite backup. No real emails or paid AI requests were used.
 
-Windows and Linux also passed every release gate in [GitHub CI run 37662562723](https://github.com/sai161812/email-outreacher/actions/runs/37662562723). The tested local package is `dist/email-outreacher-63dd14fff2d9.zip`. Detailed evidence is in `audit/2026-10-07/verification_product.json`.
+The final drafting release passed 209 tests and all Windows/Linux release gates in [run 37945988485](https://github.com/sai161812/email-outreacher/actions/runs/37945988485). The tested local package is `dist/email-outreacher-bed935ebb9ec.zip`. Current drafting guidance is in [DRAFTING_QUALITY.md](DRAFTING_QUALITY.md), with verification in `audit/2026-10-09/drafting_verification.json`; earlier operational evidence remains in `audit/2026-10-07/verification_product.json`.
 
 The existing visual design is retained. A separate UI design pass can follow functional acceptance.
 
@@ -46,7 +46,7 @@ Open **http://127.0.0.1:5000**. Keep both terminals running. Stop them with Ctrl
 
 ## First real workflow
 
-1. In Settings, save your name and verified candidate facts. Register a resume suitable for the configured attachment/link mode.
+1. In Settings, save your name, target role/level and verified project facts with concrete outcomes. Register a resume suitable for the configured attachment/link mode. See `candidate_context.example.txt` for the evidence the improved generator needs.
 2. Review existing duplicate-contact groups in Settings. Three groups were present in the original data; no records were merged or deleted automatically.
 3. Add or select a company/contact, draft, and inspect the job result. Confirm that your Gemini account successfully produces a draft.
 4. Verify the recipient, facts, content and selected resume in Review. Save changes, then approve the saved revision. New edits typed during a save require another save.

@@ -104,3 +104,7 @@ budgets and persisted pending-review warnings. The existing browser and delivery
 the complete review/send workflow. These use fake providers and cannot measure real AI output or
 recruiter response rates. No Gemini key was configured during this change; live qualitative
 evaluation remains pending account configuration.
+
+Application source **bed935e** passed **209 tests** locally and on Windows/Linux, plus source,
+dependency, package and isolated runtime gates in [CI run 37945988485](https://github.com/sai161812/email-outreacher/actions/runs/37945988485).
+Evidence is recorded in `audit/2026-10-09/drafting_verification.json`.

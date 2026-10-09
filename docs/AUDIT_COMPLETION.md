@@ -2,6 +2,8 @@
 
 Original audit application revision: `24b929a` (7 October 2026), **150 passed**. The subsequent product acceptance pass on `63dd14f` passed **167 tests** locally, adding slow-save/reconciliation, delivery-report and end-to-end follow-up checks. See [product readiness](PRODUCT_READINESS.md) and `audit/2026-10-07/verification_product.json` for current scope and release gates. This is verification of the listed repairs under the stated tests, not proof that all possible bugs are absent.
 
+The 9 October recruiter-drafting update on `6052781` passed **208 tests** locally and on Windows/Linux CI. Its follow-up-subject refinement on `bed935e` passed **209 tests** locally and on both CI platforms, with bounded quality revision, recipient-aware writing and improved content checks. See [the drafting policy](DRAFTING_QUALITY.md) for scope, source guidance and live-evaluation limits; current cross-platform results are recorded in `IMPLEMENTATION_PROGRESS.md` and `audit/2026-10-09/drafting_verification.json`.
+
 `Verified` below means the implemented application behavior passed the named isolated checks. Provider transports are fake. Existing private data requiring an owner decision is listed separately and is not silently changed.
 
 | Issue | State | Implemented behavior | Evidence | Commits |
