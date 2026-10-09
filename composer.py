@@ -43,8 +43,8 @@ FACTS AND RELEVANCE
 - Use the target role and seniority stated in the candidate facts. Do not force an internship or
   student identity. If the target is missing, describe the supported area of work without inventing
   a job title or vacancy; note the missing target in research_notes.
-- Job text supplies employer needs, NEVER evidence that the candidate has those skills. Choose
-  2-3 natural role keywords only when supported by BOTH the job/company context and candidate facts.
+- Job text supplies employer needs, NEVER evidence that the candidate has those skills. Use up to
+  3 natural role keywords supported by BOTH the job/company context and candidate facts; no minimum.
   Prefer concrete skill names and action verbs to a technology list; no keyword stuffing or ATS claims.
 - Select the single strongest relevant project or achievement: what the candidate built/did,
   which supported skill it demonstrates, and a measured result ONLY if supplied. Without a metric,

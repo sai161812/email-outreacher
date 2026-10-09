@@ -73,10 +73,12 @@ def check_body(body, follow_up=False):
 def check_subject(subject,follow_up=False):
     if not subject or not subject.strip():
         return ["Subject is required"]
+    if follow_up:
+        return []  # Preserve the original thread; hard header checks still apply.
     result=[]
     if len(subject.split())>8 or len(subject)>65:
         result.append("Use a specific subject of at most 8 words and 65 characters")
-    if not follow_up and re.match(r"\s*(?:re|fw|fwd)\s*:",subject,re.I):
+    if re.match(r"\s*(?:re|fw|fwd)\s*:",subject,re.I):
         result.append("Do not imply an existing conversation in an initial subject")
     if re.search(r"\b(?:urgent|guaranteed|must read|act now)\b|!!",subject,re.I):
         result.append("Remove urgency or clickbait from the subject")

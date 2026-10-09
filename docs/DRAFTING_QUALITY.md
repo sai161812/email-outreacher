@@ -20,11 +20,11 @@ Recruiter response or selection still depends on fit, evidence, timing and the e
 | Opening | State the purpose and relevant role/company connection; avoid a biography, generic praise or filler |
 | Evidence | Choose one relevant project/achievement: action, demonstrated skill and an actual result or concrete feature |
 | Truthfulness | Preserve personal-project/coursework/team qualifiers; never invent metrics, seniority, availability, referrals or prior contact |
-| Keywords | Use 2-3 natural role terms supported by both candidate facts and job/company context; no skill inflation or ATS claims |
+| Keywords | Use up to 3 natural role terms supported by both candidate facts and job/company context; no minimum, skill inflation or ATS claims |
 | Personalization | Prefer relevant official company/product/careers information; do not assume a listing remains open |
 | Tone | Professional, warm, direct and confident at the candidate's actual level; avoid hype, excessive formality and desperation |
 | Request | One easy-to-answer question; recruiter application/fit questions differ from manager/team relevance questions |
-| Subject | Descriptive target/area and useful context, at most 8 words and 65 characters; no fake Re:/Fwd: or clickbait |
+| Subject | Initial subject: descriptive target/area and useful context, at most 8 words and 65 characters; no fake Re:/Fwd: or clickbait. Follow-ups preserve the original subject rather than shortening it |
 | Formatting | Plain-text paragraphs; the app owns the greeting and compact signature with at most two distinct profile links |
 | Resume references | The AI must not claim a resume is attached or linked because the delivery asset can change during review |
 | Review evidence | Notes should identify company sources/uncertainties, the supporting candidate fact, shared keywords and missing context |

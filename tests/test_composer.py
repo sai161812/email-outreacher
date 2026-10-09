@@ -281,3 +281,12 @@ def test_valid_json_text_is_usable_when_sdk_parsed_field_is_absent(ai_client):
     assert result["body"]==STRONG_PITCH
     assert result["quality_warnings"]==[]
     assert fake.models.generate_content.call_count==1
+
+def test_clean_followup_does_not_rewrite_a_long_inherited_subject(ai_client):
+    fake,_=ai_client
+    subject="Re: Principal Software Engineer Infrastructure and Developer Productivity at Example"
+    fake.models.generate_content.return_value=response(STRONG_FOLLOWUP,subject=subject,follow_up=True)
+    result=composer._generate("original subject and source facts",composer.FollowUpDraft,composer.FOLLOW_UP_SYSTEM_PROMPT)
+    assert result["subject"]==subject
+    assert result["quality_warnings"]==[]
+    assert fake.models.generate_content.call_count==1
