@@ -1,0 +1,137 @@
+{
+  "reviewer": "",
+  "ratings": [
+    {
+      "id": "recruiter",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "manager",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "unknown-title",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "sparse",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "no-vacancy",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "applied",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "wrong-level",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "weak-research",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "injection",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "followup",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "dated-update",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    },
+    {
+      "id": "relationship",
+      "truthful": null,
+      "relevant_proof": null,
+      "correct_audience": null,
+      "natural_voice": null,
+      "useful_subject": null,
+      "single_next_step": null,
+      "needs_substantial_rewrite": null,
+      "notes": ""
+    }
+  ]
+}

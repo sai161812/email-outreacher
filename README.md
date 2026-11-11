@@ -50,6 +50,30 @@ The factory also initializes/migrates the database when imported by Flask or Wai
 
 ## First use
 
+Milestone 3 adds **Targets** for multiple role briefs at a company and up to three
+owner-supplied projects. Record role/level, job text, application status/date,
+constraints, relationship context, proof and company sources. Dates and claims
+remain your assertions and require verification. Existing company job fields
+migrate into a default role brief; old correspondence remains readable.
+
+In Contacts, choose the role and resume, then **Draft** or **Write manually**.
+Manual writing needs your profile but no Gemini key; the app adds greeting and
+signature. Review retains the generation inputs, selected project, model/prompt
+version and call/latency information when available. Role-linked drafts require
+**I verified this saved revision** before approval. Saving edits or changing
+relevant evidence clears that acknowledgment. Reject unsupported claims rather
+than relying on AI notes or a clean linter as verification.
+
+**Regenerate** replaces an existing unsent draft only after successful generation
+and a revision check; it preserves text on failure or concurrent edits and requires
+new review/approval on success. Follow-up generation offers the original resume,
+a replacement or **No resume** before checking assets. Nothing is sent automatically.
+
+The [12-case drafting evaluation](docs/DRAFT_EVALUATION.md) exports reference or
+explicitly requested live outputs with ratings, latency/call counts and failure
+information. Reference samples never establish live model quality. R11 live and
+human acceptance remains pending in Milestone 3.
+
 1. In **Settings**, enter your name and truthful candidate facts. Add a PDF resume you wrote, an HTTPS resume link, or deliberately select **No resume** while reviewing a draft.
 2. In **Companies**, add the company and optional job text/URL. In **Contacts**, select the company and enter a contact, or import companies_template.csv.
 3. Click **Draft**, then inspect its result in **Jobs** and open **Review**. Keyword matching selects the resume with the most whole-keyword matches; ties/no matches use the earliest registered variant. Review provides a manual override.
