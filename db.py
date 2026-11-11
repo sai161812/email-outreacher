@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS suppressions (
 """
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 STATUSES = ("pending_review", "approved", "sending", "sent", "replied", "ghosted",
             "bounced", "interview_scheduled", "interview_completed", "offer", "no_offer",
             "rejected", "failed", "uncertain", "canceled")
@@ -135,7 +135,9 @@ def _init_db_locked():
                     "revision": "INTEGER NOT NULL DEFAULT 1",
                     "approval_json": "TEXT", "research_notes": "TEXT",
                     "grounding_json": "TEXT", "generation_error": "TEXT",
-                    "thread_root_id": "INTEGER REFERENCES emails(id)"
+                    "thread_root_id": "INTEGER REFERENCES emails(id)",
+                    "opportunity_id":"INTEGER REFERENCES opportunities(id)",
+                    "input_snapshot_json":"TEXT", "evidence_verified_at":"TEXT"
                 }
             }
             for table, columns in additions.items():
@@ -148,6 +150,12 @@ CREATE TABLE IF NOT EXISTS events (
  id INTEGER PRIMARY KEY, email_id INTEGER REFERENCES emails(id), kind TEXT NOT NULL,
  detail TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS opportunities (
+ id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id),
+ role TEXT NOT NULL, job_text TEXT NOT NULL DEFAULT '', brief_json TEXT NOT NULL DEFAULT '{}',
+ revision INTEGER NOT NULL DEFAULT 1, legacy_default INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS opportunities_company_idx ON opportunities(company_id);
 CREATE TABLE IF NOT EXISTS send_attempts (
  id INTEGER PRIMARY KEY, email_id INTEGER NOT NULL REFERENCES emails(id),
  company_id INTEGER NOT NULL REFERENCES companies(id), recipient TEXT NOT NULL,
@@ -188,6 +196,10 @@ CREATE INDEX IF NOT EXISTS attempts_quota_idx ON send_attempts(state,created_at,
 CREATE INDEX IF NOT EXISTS events_email_idx ON events(email_id,kind);
 CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs(status,created_at);
 """)
+            conn.execute("""INSERT INTO opportunities(company_id,role,job_text,brief_json,legacy_default)
+                SELECT c.id,'Existing company target',coalesce(c.job_text,''),json_object('role_url',c.job_url),1
+                FROM companies c WHERE (coalesce(c.job_text,'')<>'' OR coalesce(c.job_url,'')<>'')
+                AND NOT EXISTS(SELECT 1 FROM opportunities o WHERE o.company_id=c.id AND o.legacy_default=1)""")
             attempt_columns={r[1] for r in conn.execute('PRAGMA table_info(send_attempts)')}
             if 'sender' not in attempt_columns:
                 conn.execute("ALTER TABLE send_attempts ADD COLUMN sender TEXT NOT NULL DEFAULT ''")

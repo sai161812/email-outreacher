@@ -171,6 +171,40 @@ def create_app(overrides=None):
         return jsonify(candidate_context=content,source="context.txt")
     @app.get("/api/companies")
     def companies(): return jsonify(contacts.list_companies(*page(),request.args.get("search","")[:200]))
+    @app.get('/api/projects')
+    def projects_list():
+        import opportunities
+        return jsonify(opportunities.projects())
+    @app.post('/api/projects')
+    def projects_save():
+        import opportunities
+        data=payload({'projects'},{'projects'})
+        return jsonify(projects=opportunities.save_projects(data['projects']))
+    @app.get('/api/opportunities')
+    def opportunity_list():
+        import opportunities
+        cid=request.args.get('company_id')
+        if cid is not None:
+            try: cid=ident(int(cid))
+            except ValueError: raise ValueError('Invalid company_id')
+        return jsonify(opportunities.list_all(cid))
+    @app.post('/api/opportunities')
+    def opportunity_create():
+        import opportunities
+        data=payload(opportunities.FIELDS|{'company_id'},{'company_id','role'})
+        cid=ident(data.pop('company_id'))
+        return jsonify(id=opportunities.save(cid,data)),201
+    @app.patch('/api/opportunities/<int:oid>')
+    def opportunity_edit(oid):
+        import opportunities
+        data=payload(opportunities.FIELDS,{'role'})
+        return jsonify(id=opportunities.save(opportunities.get(oid)['company_id'],data,oid))
+    @app.post('/api/review/<int:eid>/verify-evidence')
+    def evidence_verify(eid):
+        import opportunities
+        data=payload({'revision'},{'revision'})
+        opportunities.acknowledge(eid,ident(data['revision']))
+        return jsonify(success=True,email=EmailRepository.get_by_id(eid))
     @app.post("/api/companies")
     def add_company():
         data=payload({"name","domain","job_url","job_text","notes"},{"name"})
@@ -275,10 +309,14 @@ def create_app(overrides=None):
         return jsonify(success=True)
     @app.post("/api/compose")
     def compose():
-        data=payload({"company_id","contact_id","resume_variant_id"},{"company_id","contact_id"})
+        data=payload({"company_id","contact_id","resume_variant_id","opportunity_id"},{"company_id","contact_id"})
         for name in ("company_id","contact_id"): ident(data[name],name)
         company=contacts.get_company(data["company_id"]);contact=contacts.get_contact(data["contact_id"])
         if contact["company_id"]!=company["id"]: raise Conflict("Contact does not belong to company")
+        if data.get('opportunity_id') is not None:
+            import opportunities
+            opportunity=opportunities.get(ident(data['opportunity_id']),company['id'])
+            company={**company,'job_text':opportunity['job_text']}
         if "resume_variant_id" not in data:
             selected=resume.pick_best_variant(company.get("job_text"))
             data["resume_variant_id"]=selected["id"] if selected else None
@@ -286,9 +324,9 @@ def create_app(overrides=None):
         return jsonify(jobs.enqueue("compose",data,request_key())),202
     @app.post('/api/drafts/manual')
     def manual_draft():
-        data=payload({'company_id','contact_id','subject','body','resume_variant_id','follow_up_to_email_id'},{'company_id','contact_id','subject','body'})
+        data=payload({'company_id','contact_id','subject','body','resume_variant_id','follow_up_to_email_id','opportunity_id'},{'company_id','contact_id','subject','body'})
         for key in ('company_id','contact_id'): ident(data[key],key)
-        for key in ('resume_variant_id','follow_up_to_email_id'):
+        for key in ('resume_variant_id','follow_up_to_email_id','opportunity_id'):
             if data.get(key) is not None: ident(data[key],key)
         return jsonify(id=composer.manual_draft(**data)),201
     @app.post('/api/review/<int:eid>/regenerate')

@@ -68,6 +68,7 @@ class CompanyRepository:
                 raise Conflict("Resolve in-flight delivery before changing this company")
             conn.execute("UPDATE companies SET "+",".join(f"{k}=?" for k in data)+" WHERE id=?",(*data.values(),cid))
             revoke_approvals(conn,"company_id",cid)
+            conn.execute("UPDATE emails SET evidence_verified_at=NULL WHERE company_id=? AND status='pending_review'",(cid,))
     @staticmethod
     def get_by_id(cid):
         return one("SELECT * FROM companies WHERE id=?", (cid,))
@@ -186,7 +187,7 @@ class EmailRepository:
     def get_by_contact_id(cid):
         return rows("SELECT * FROM emails WHERE contact_id=? ORDER BY id", (cid,))
     @staticmethod
-    def create(company_id, contact_id, resume_variant_id, hook, subject, body, qc_warnings, follow_up_to_email_id=None, research_notes=None, grounding_json=None):
+    def create(company_id, contact_id, resume_variant_id, hook, subject, body, qc_warnings, follow_up_to_email_id=None, research_notes=None, grounding_json=None,opportunity_id=None,input_snapshot=None):
         with get_connection(immediate=True) as conn:
             ct=conn.execute('SELECT email,archived FROM contacts WHERE id=?',(contact_id,)).fetchone()
             company=conn.execute('SELECT archived FROM companies WHERE id=?',(company_id,)).fetchone()
@@ -194,6 +195,8 @@ class EmailRepository:
                 raise Conflict('Contact/company is unavailable')
             if conn.execute('SELECT 1 FROM suppressions WHERE lower(trim(email))=?',(ct['email'].strip().lower(),)).fetchone():
                 raise Conflict('Recipient is suppressed')
+            if opportunity_id is not None and not conn.execute('SELECT 1 FROM opportunities WHERE id=? AND company_id=?',(opportunity_id,company_id)).fetchone():
+                raise Conflict('Opportunity belongs to another company or is unavailable')
             root = None
             if follow_up_to_email_id:
                 parent = require_email(conn, follow_up_to_email_id)
@@ -202,8 +205,8 @@ class EmailRepository:
                 check(conn,{"company_id":company_id,"contact_id":contact_id,"follow_up_to_email_id":follow_up_to_email_id})
             try:
                 eid = conn.execute("""INSERT INTO emails(company_id,contact_id,resume_variant_id,hook,subject,body,qc_warnings,
-                    follow_up_to_email_id,thread_root_id,research_notes,grounding_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                    (company_id,contact_id,resume_variant_id,hook,subject,body,qc_warnings,follow_up_to_email_id,root,research_notes,grounding_json)).lastrowid
+                    follow_up_to_email_id,thread_root_id,research_notes,grounding_json,opportunity_id,input_snapshot_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (company_id,contact_id,resume_variant_id,hook,subject,body,qc_warnings,follow_up_to_email_id,root,research_notes,grounding_json,opportunity_id,json.dumps(input_snapshot) if input_snapshot else None)).lastrowid
             except sqlite3.IntegrityError as exc:
                 raise Conflict("Invalid relationship or recipient already has active outreach") from exc
             event(conn,eid,"draft_created")
@@ -220,8 +223,8 @@ class EmailRepository:
             import followups
             followups.check(conn,row,for_existing=True)
             conn.execute("""UPDATE emails SET subject=?,body=?,hook=?,resume_variant_id=?,research_notes=?,grounding_json=?,qc_warnings=?,
-                status='pending_review',approval_json=NULL,revision=revision+1,updated_at=? WHERE id=?""",
-                (generated['subject'],generated['body'],generated['hook'],generated['resume_variant_id'],generated['research_notes'],generated['grounding_json'],generated['qc_warnings'],timestamp(),eid))
+                input_snapshot_json=?,evidence_verified_at=NULL,status='pending_review',approval_json=NULL,revision=revision+1,updated_at=? WHERE id=?""",
+                (generated['subject'],generated['body'],generated['hook'],generated['resume_variant_id'],generated['research_notes'],generated['grounding_json'],generated['qc_warnings'],json.dumps(generated.get('input_snapshot')),timestamp(),eid))
             event(conn,eid,'draft_regenerated',{'revision':row['revision']+1})
     @staticmethod
     def update_content(eid, subject=None, body=None, hook=None, expected_revision=None, resume_variant_id=None, change_resume=False):
@@ -242,7 +245,7 @@ class EmailRepository:
                 row["resume_variant_id"] = resume_variant_id
             warnings = "; ".join(qc.warnings(row["subject"],row["body"],bool(row["follow_up_to_email_id"])))
             conn.execute("""UPDATE emails SET subject=?,body=?,hook=?,resume_variant_id=?,qc_warnings=?,
-                status='pending_review',approval_json=NULL,revision=revision+1,updated_at=? WHERE id=?""",
+                status='pending_review',approval_json=NULL,evidence_verified_at=NULL,revision=revision+1,updated_at=? WHERE id=?""",
                 (row["subject"],row["body"],row["hook"],row["resume_variant_id"],warnings,timestamp(),eid))
             event(conn,eid,"draft_edited",{"revision":row["revision"]+1})
     @staticmethod
@@ -254,6 +257,8 @@ class EmailRepository:
             check_revision(row,expected_revision)
             if row["status"] != "pending_review" or row["sent_at"]:
                 raise Conflict("Only a pending draft can be approved")
+            if row['opportunity_id'] and not row['evidence_verified_at']:
+                raise Conflict('Verify role, candidate claims and source evidence before approving')
             errors = qc.blockers(row["subject"],row["body"])
             if row["generation_error"] or row["hook"] == "PARSE_ERROR":
                 errors.append("Regenerate the failed draft")
@@ -346,6 +351,8 @@ class ProfileRepository:
         with get_connection(immediate=True) as conn:
             if candidate_context is not None:
                 conn.execute("INSERT INTO settings(key,value) VALUES ('candidate_context',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(candidate_context,))
+                from opportunities import invalidate
+                invalidate(conn)
             if profile is None:
                 return
             conn.execute("""INSERT INTO profile(id,full_name,email,phone,linkedin_url,github_url,portfolio_url)

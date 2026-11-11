@@ -45,6 +45,39 @@ def browser_app(temp_db,monkeypatch):
 def open_view(page,name):
     page.get_by_role("navigation").get_by_role("button",name=name,exact=True).click()
 
+
+def test_target_projects_manual_draft_and_evidence_review(browser_app,contact):
+    import candidate_profile
+    from repository import rows
+    page,url,smtp,errors=browser_app
+    candidate_profile.set_profile('Candidate')
+    page.goto(url)
+    open_view(page,'Targets')
+    page.get_by_role('button',name='Edit project evidence',exact=True).click()
+    page.get_by_label('Project name 1',exact=True).fill('CSV dashboard')
+    page.get_by_label('What you built or did 1',exact=True).fill('Built a personal Python CSV dashboard')
+    page.get_by_role('button',name='Save projects',exact=True).click()
+    page.get_by_role('button',name='Add role brief',exact=True).click()
+    page.get_by_label('role',exact=True).fill('Backend engineer')
+    page.get_by_label('project id',exact=True).select_option(label='CSV dashboard')
+    page.get_by_label('job text',exact=True).fill('Python SQL internal tools')
+    page.get_by_role('button',name='Save role brief',exact=True).click()
+    open_view(page,'Contacts')
+    page.get_by_label('Role for new drafts',exact=True).select_option(label='Example / Backend engineer')
+    page.get_by_role('button',name='Write manually',exact=True).click()
+    page.get_by_label('Subject',exact=True).fill('Backend engineer at Example')
+    page.get_by_label('Pitch (greeting and signature are added)',exact=True).fill('My personal Python dashboard validates CSV files. Could you advise on the application route?')
+    page.get_by_role('button',name='Create draft',exact=True).click()
+    approve=page.get_by_role('button',name='Approve saved revision',exact=True)
+    expect(approve).to_be_disabled()
+    page.get_by_role('button',name='I verified this saved revision',exact=True).click()
+    expect(approve).to_be_enabled()
+    with page.expect_response(lambda response:response.url.endswith('/api/review/1') and response.request.method=='POST'):
+        page.get_by_role('button',name='Reject',exact=True).click()
+    assert rows('SELECT status FROM emails')[0]['status']=='rejected'
+    smtp.sendmail.assert_not_called()
+    assert errors==[]
+
 def test_review_edits_during_save_require_another_save(browser_app,contact):
     from repository import EmailRepository
     page,url,_,errors=browser_app

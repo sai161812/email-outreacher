@@ -4,7 +4,7 @@ let csrf="",view="Dashboard",epoch=0,dirty=new Set(),contactsOffset=0,contactSea
 const pendingWrites=new Set();
 const offsets={Companies:0,Review:0,Queue:0,Tracking:0};
 let operationId=null;
-const pages=["Dashboard","Contacts","Companies","Review","Queue","Tracking","Settings","Jobs"];
+const pages=["Dashboard","Contacts","Companies","Review","Queue","Tracking","Targets","Settings","Jobs"];
 function el(tag,attrs={},...children){
     const node=document.createElement(tag);
     for(const [key,value] of Object.entries(attrs)){
@@ -97,10 +97,12 @@ async function dashboard(){
     return root;
 }
 async function contactsView(){
-    const [people,companies,setup]=await Promise.all([api("/api/contacts?limit=100&offset="+contactsOffset+"&search="+encodeURIComponent(contactSearch)),api("/api/companies"),api("/api/settings")]);
+    const [people,companies,setup,targets]=await Promise.all([api("/api/contacts?limit=100&offset="+contactsOffset+"&search="+encodeURIComponent(contactSearch)),api("/api/companies"),api("/api/settings"),api("/api/opportunities")]);
     const draftResume=select([["auto","Automatic match"],["none","No resume"],...setup.resumes.map(r=>[r.id,r.name])],"auto");
+    const target=select([[0,"Company context (no selected role)"],...targets.map(t=>[t.id,(companies.find(c=>c.id===t.company_id)?.name||"Company #"+t.company_id)+" / "+t.role])],0);
+    function chosenTarget(person){const selected=targets.find(t=>t.id===Number(target.value));if(selected&&selected.company_id!==person.company_id)throw new Error("Choose a role at this contact's company.");return selected?.id||null;}
     function draftFor(person){
-        const data={company_id:person.company_id,contact_id:person.id};
+        const data={company_id:person.company_id,contact_id:person.id,opportunity_id:chosenTarget(person)};
         if(draftResume.value!=="auto")data.resume_variant_id=draftResume.value==="none"?null:Number(draftResume.value);
         return queued("/api/compose",data);
     }
@@ -108,17 +110,17 @@ async function contactsView(){
     const file=el("input",{type:"file",accept:".csv","aria-label":"Import contacts CSV"});
     file.addEventListener("change",async()=>{if(!file.files.length)return;const form=new FormData();form.append("file",file.files[0]);try{const r=await api("/api/contacts/import","POST",form);toast(r.contacts_created+" contacts added; "+r.duplicates_skipped+" duplicates skipped.");if(r.errors.length)toast(r.errors.map(e=>"Row "+e.row+": "+e.error).join("; "),true);await render();}catch(e){toast(e.message,true);}finally{file.value="";}});
     const root=el("div",{},title("Contacts",button("Add contact",()=>contactForm(companies)),button("Search",async()=>{contactSearch=search.value;contactsOffset=0;await render();})),field("Search name, company or email",search),field("Import CSV",file));
-    root.append(field("Resume for new drafts",draftResume));
-    root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"—",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>draftFor(p)),button("Write manually",()=>manualDraftForm(p,setup)),button("Edit",()=>contactForm(companies,p)),button("Do not contact",()=>suppressAddress(p.email)),button("Check DNS",async()=>{const result=await api("/api/contacts/"+p.id+"/validate","POST",{});toast((result.warning||"Domain accepts mail in DNS")+". "+result.note,!!result.warning);})))))));
+    root.append(field("Role for new drafts",target),field("Resume for new drafts",draftResume));
+    root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"—",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>draftFor(p)),button("Write manually",()=>manualDraftForm(p,setup,chosenTarget(p))),button("Edit",()=>contactForm(companies,p)),button("Do not contact",()=>suppressAddress(p.email)),button("Check DNS",async()=>{const result=await api("/api/contacts/"+p.id+"/validate","POST",{});toast((result.warning||"Domain accepts mail in DNS")+". "+result.note,!!result.warning);})))))));
     if(!people.length)root.append(el("p",{},"No contacts found. Add a company first, or import the sample CSV."));
     root.append(el("div",{class:"actions"},button("Previous",async()=>{contactsOffset=Math.max(0,contactsOffset-100);await render();}),button("Next",async()=>{if(people.length===100){contactsOffset+=100;await render();}})));
     return root;
 }
-function manualDraftForm(person,setup){
+function manualDraftForm(person,setup,opportunityId=null){
     const subject=input(),body=el('textarea',{rows:8}),variant=select([['none','No resume'],...setup.resumes.map(r=>[r.id,r.name])],'none');
     const form=el('div',{},field('Subject',subject),field('Pitch (greeting and signature are added)',body),field('Resume',variant));
     const dialog=modal('Write manually',form);
-    form.append(button('Create draft',async()=>{await api('/api/drafts/manual','POST',{company_id:person.company_id,contact_id:person.id,subject:subject.value,body:body.value,resume_variant_id:variant.value==='none'?null:Number(variant.value)});dialog.close();await navigate('Review');},'primary'));
+    form.append(button('Create draft',async()=>{await api('/api/drafts/manual','POST',{company_id:person.company_id,contact_id:person.id,opportunity_id:opportunityId,subject:subject.value,body:body.value,resume_variant_id:variant.value==='none'?null:Number(variant.value)});dialog.close();await navigate('Review');},'primary'));
 }
 function followupForm(original,setup){
     const variant=select([['original','Use original resume'],['none','No resume'],...setup.resumes.map(r=>[r.id,r.name])],'original');
@@ -145,6 +147,30 @@ function companyForm(company=null){
     const dialog=modal(company?"Edit company":"Add company",body);
     body.append(button("Save",async()=>{const data=Object.fromEntries(Object.entries(fields).map(([key,node])=>[key,node.value]));await api(company?"/api/companies/"+company.id:"/api/companies",company?"PATCH":"POST",data);dialog.close();await render();},"primary"));
 }
+async function targetsView(){
+    const [companies,targets,projects]=await Promise.all([api('/api/companies?limit=500'),api('/api/opportunities'),api('/api/projects')]);
+    const root=el('div',{},title('Targets and project evidence',button('Add role brief',()=>targetForm(companies,projects)),button('Edit project evidence',()=>projectsForm(projects))),el('p',{},'Record only facts you can support. Application status, relationships and results are owner supplied. Source links and AI notes require independent review.'),table(['Company','Role','Level','Application','Actions'],targets.map(t=>el('tr',{},cell(companies.find(c=>c.id===t.company_id)?.name||t.company_id),cell(t.role),cell(t.level||'Unknown'),cell(t.application_status||'Unknown'),cell(button('Edit role brief',()=>targetForm(companies,projects,t)))))));
+    root.append(card('Your projects',projects.map(p=>el('p',{},p.name+': '+p.action+' / '+(p.result||'No measured result')))));
+    return root;
+}
+function targetForm(companies,projects,target=null){
+    if(!companies.length){toast('Add a company first.',true);return;}
+    const company=select(companies.map(c=>[c.id,c.name]),target?.company_id||companies[0].id);company.disabled=!!target;
+    const nodes={};
+    for(const key of ['role','level','role_url','requisition','application_date','constraints','relationship','company_source','source_verified_date'])nodes[key]=input(target?.[key]||'',key.endsWith('date')?'date':key.includes('url')||key==='company_source'?'url':'text');
+    nodes.application_status=select([['unknown','Unknown'],['not_applied','Not applied'],['applied','Applied (owner confirmed)']],target?.application_status||'unknown');
+    nodes.project_id=select([['','No selected project'],...projects.map(p=>[p.id,p.name])],target?.project_id||'');
+    nodes.job_text=el('textarea',{rows:6,value:target?.job_text||''});
+    const form=el('div',{},field('Company',company),Object.entries(nodes).map(([k,n])=>field(k.replaceAll('_',' '),n)));
+    const dialog=modal(target?'Edit role brief':'Add role brief',form);
+    form.append(button('Save role brief',async()=>{const data=Object.fromEntries(Object.entries(nodes).map(([k,n])=>[k,n.value]));if(!target)data.company_id=Number(company.value);await api(target?'/api/opportunities/'+target.id:'/api/opportunities',target?'PATCH':'POST',data);dialog.close();await render();},'primary'));
+}
+function projectsForm(projects){
+    const entries=[0,1,2].map(i=>{const p=projects[i]||{};return {id:p.id,name:input(p.name),action:el('textarea',{value:p.action||''}),result:input(p.result),proof_url:input(p.proof_url,'url')};});
+    const form=el('div',{},entries.map((e,i)=>card('Project '+(i+1),field('Project name '+(i+1),e.name),field('What you built or did '+(i+1),e.action),field('Actual result (optional) '+(i+1),e.result),field('Proof URL (optional) '+(i+1),e.proof_url))));
+    const dialog=modal('Edit project evidence',form);
+    form.append(button('Save projects',async()=>{const items=entries.filter(e=>e.name.value.trim()||e.action.value.trim()).map(e=>({...(e.id?{id:e.id}:{}),name:e.name.value,action:e.action.value,result:e.result.value,proof_url:e.proof_url.value}));await api('/api/projects','POST',{projects:items});dialog.close();await render();},'primary'));
+}
 async function reviewView(){
     const [drafts,setup]=await Promise.all([api("/api/review?limit=100&offset="+offsets.Review),api("/api/settings")]);
     const root=el("div",{},title("Review queue"));
@@ -155,9 +181,9 @@ async function reviewView(){
         const variant=select([[0,"No resume"],...setup.resumes.map(r=>[r.id,r.name])],draft.resume_variant_id||0);
         const warnings=el("p",{class:"warning"},draft.qc_warnings||"Review facts, recipient, content and resume before approving.");
         const status=el("p",{class:"muted"},"Revision "+draft.revision+" · Pending review · Sender: "+(setup.configuration.sender||"Configure Gmail before approving"));
-        const approve=button("Approve saved revision",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"approve",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Approved. Available in Queue.");},true),"primary",()=>writing||dirty.has(draft.id));
+        const approve=button("Approve saved revision",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"approve",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Approved. Available in Queue.");},true),"primary",()=>writing||dirty.has(draft.id)||(draft.opportunity_id&&!draft.evidence_verified_at));
         const section=card(draft.company_name+" · "+draft.contact_email,status,field("Subject",subject),field("Research hook",hook),field("Body",body),field("Resume choice",variant),warnings);
-        function syncActions(){save.disabled=writing;reject.disabled=writing;approve.disabled=writing||dirty.has(draft.id);}
+        function syncActions(){save.disabled=writing;reject.disabled=writing;approve.disabled=writing||dirty.has(draft.id)||!!(draft.opportunity_id&&!draft.evidence_verified_at);}
         async function writeReview(action,lockInputs=false){
             if(writing)return;
             writing=true;syncActions();
@@ -170,6 +196,11 @@ async function reviewView(){
         section.append(el("details",{},el("summary",{},"Research notes and sources"),el("p",{class:"warning"},"AI-written notes and URLs require independent verification."),el("pre",{},draft.research_notes||"No source evidence saved; verify company claims independently."),
             el("ul",{class:"sources"},[...new Set((draft.research_notes||"").match(/https:\/\/[^\s<>]+/g)||[])].map(url=>el("li",{},safeLink(url,url)))),
             el("pre",{},draft.grounding_json||"")));
+        const evidence=draft.input_snapshot_json?JSON.parse(draft.input_snapshot_json):null;
+        if(evidence){
+            const proof=evidence.project,role=evidence.opportunity;
+            section.append(card('Draft evidence',el('p',{},'Owner-supplied role: '+(role?.role||'No role selected')),el('p',{},'Owner-supplied proof: '+(proof?proof.name+' / '+proof.action+' / '+(proof.result||'No measured result supplied'):'Candidate facts in saved inputs')),proof?.proof_url?safeLink(proof.proof_url,'Open project proof'):null,role?.company_source?safeLink(role.company_source,'Company source (verify independently)'):null,el('p',{},'Owner-reported source verification date: '+(role?.source_verified_date||'None')+' | Draft acknowledgment: '+(draft.evidence_verified_at||'Not yet verified')),el('details',{},el('summary',{},'Saved generation inputs and model version'),el('pre',{},JSON.stringify(evidence,null,2))),button('I verified this saved revision',()=>writeReview(async()=>{if(dirty.has(draft.id))throw new Error('Save your edits before verifying.');const result=await api('/api/review/'+draft.id+'/verify-evidence','POST',{revision:draft.revision});draft=result.email;toast('Verification recorded for this revision.');},true))));
+        }
         const asset=el("div",{});
         function showAsset(){
             const selected=setup.resumes.find(r=>r.id===Number(variant.value));
@@ -191,6 +222,7 @@ async function reviewView(){
         }),"",()=>writing);
         reject=button("Reject",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"reject",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Draft rejected.");},true),"danger",()=>writing);
         section.append(el("div",{class:"actions"},save,approve,reject,button("Regenerate",async()=>{if(dirty.has(draft.id)){toast("Save your edits before regenerating.",true);return;}if(!confirm("Replace this draft with AI output? Manual edits will be replaced only if generation succeeds; review and approval will be required again."))return;await queued("/api/review/"+draft.id+"/regenerate",{revision:draft.revision,resume_variant_id:Number(variant.value)||null});})));
+        syncActions();
         root.append(section);
     }
     paginate(root,"Review",drafts);return root;
@@ -295,7 +327,7 @@ async function pollOperation(){
     document.getElementById("operation-status").textContent="Job #"+job.id+" · "+job.status+counts+(job.error?" · "+job.error:"");
     if(["complete","failed","canceled"].includes(job.status))operationId=null;
 }
-const loaders={Dashboard:dashboard,Contacts:contactsView,Companies:companiesView,Review:reviewView,Queue:queueView,Tracking:trackingView,Settings:settingsView,Jobs:jobsView};
+const loaders={Dashboard:dashboard,Contacts:contactsView,Companies:companiesView,Review:reviewView,Queue:queueView,Tracking:trackingView,Targets:targetsView,Settings:settingsView,Jobs:jobsView};
 async function loginScreen(){
     loggedIn=false;epoch++;
     content.setAttribute("aria-busy","false");
