@@ -61,10 +61,18 @@ def _send_one(server,to_email,subject,body,resume_path=None,company_name=None,in
     server.sendmail(config.GMAIL_ADDRESS,to_email,msg.as_bytes())
     return msg["Message-ID"]
 
-def run_send_batch(dry_run=False, force=False, progress=None):
+def run_send_batch(dry_run=False, force=False, progress=None,members=None,batch_sender=None,stop_requested=lambda:False):
     if force:
         raise ValueError("Send-window overrides are disabled; change the configured window explicitly")
-    queue=get_approved_queue()
+    if batch_sender is not None and batch_sender!=config.GMAIL_ADDRESS.strip().lower():
+        raise Conflict('Batch sender changed; review and queue again')
+    if members is None:
+        queue=get_approved_queue()
+    else:
+        queue=[]
+        for member in members:
+            row=EmailRepository.get_by_id(member['id'])
+            queue.append({**(row or {}),'id':member['id'],'expected_revision':member['revision']})
     summary=[]
     if not dry_run and queue:
         config.require_gmail_creds()
@@ -78,6 +86,16 @@ def run_send_batch(dry_run=False, force=False, progress=None):
             claim=None
             submission_started=False
             try:
+                if stop_requested():
+                    summary.append({'id':eid,'status':'canceled','reason':'Stopped before submission'})
+                    continue
+                if 'expected_revision' in item:
+                    latest=EmailRepository.get_by_id(eid)
+                    if not latest or latest['revision']!=item['expected_revision'] or latest['status']!='approved':
+                        summary.append({'id':eid,'status':'skipped','reason':'Reviewed batch member changed'})
+                        continue
+                    with get_connection() as conn:
+                        item['contact_email']=conn.execute('SELECT email FROM contacts WHERE id=?',(latest['contact_id'],)).fetchone()[0]
                 if transport_failed:
                     summary.append({"id":eid,"status":"deferred","reason":"Transport setup failed earlier in this batch"})
                     continue
@@ -94,18 +112,26 @@ def run_send_batch(dry_run=False, force=False, progress=None):
                             summary.append({"id":eid,"status":"skipped","reason":"Already claimed or changed"})
                             continue
                         row=dict(latest)
+                        if item.get('expected_revision',row['revision'])!=row['revision']:
+                            summary.append({'id':eid,'status':'skipped','reason':'Batch revision changed'})
+                            continue
                         delivery._validate(conn,row)
                         delivery._quota(conn,row["company_id"],projected=projected)
                     projected.append(row["company_id"])
                     summary.append({"id":eid,"status":"dry_run","contact":item["contact_email"]})
                     continue
                 if needs_delay:
-                    time.sleep(random.randint(config.MIN_DELAY_SECONDS,config.MAX_DELAY_SECONDS))
+                    for _ in range(random.randint(config.MIN_DELAY_SECONDS,config.MAX_DELAY_SECONDS)):
+                        if stop_requested(): break
+                        time.sleep(1)
                     needs_delay=False
+                if stop_requested():
+                    summary.append({'id':eid,'status':'canceled','reason':'Stopped before submission'})
+                    continue
                 if not is_in_send_window():
                     summary.append({"id":eid,"status":"deferred","reason":"Outside send window"})
                     continue
-                claim=delivery.claim(eid)
+                claim=delivery.claim(eid,item.get('expected_revision'))
                 if not claim:
                     summary.append({"id":eid,"status":"skipped","reason":"Already claimed or changed"})
                     continue
@@ -114,6 +140,10 @@ def run_send_batch(dry_run=False, force=False, progress=None):
                     server=smtplib.SMTP(config.SMTP_HOST,config.SMTP_PORT,timeout=config.PROVIDER_TIMEOUT)
                     server.starttls(context=ssl.create_default_context())
                     server.login(config.GMAIL_ADDRESS,config.GMAIL_APP_PASSWORD)
+                if stop_requested():
+                    delivery.finish(claim['attempt_id'],'canceled','batch_stopped')
+                    summary.append({'id':eid,'status':'canceled','reason':'Stopped before submission'})
+                    continue
                 approved=delivery.prepare(claim["attempt_id"])
                 submission_started=True
                 parent=EmailRepository.get_by_id(item["follow_up_to_email_id"]) if item["follow_up_to_email_id"] else None

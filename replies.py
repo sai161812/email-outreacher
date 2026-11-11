@@ -13,6 +13,30 @@ from db import get_connection
 from repository import EmailRepository,rows,timestamp
 from followups import parsed_time
 
+
+def unresolved_candidates():
+    return rows("""SELECT e.id,a.id attempt_id,a.message_id,a.recipient contact_email,'sent' status,
+        COALESCE((SELECT created_at FROM events v WHERE v.email_id=e.id AND v.kind='submission_started'
+          AND json_extract(v.detail,'$.attempt_id')=a.id ORDER BY v.id LIMIT 1),a.created_at) sent_at
+        FROM send_attempts a JOIN emails e ON e.id=a.email_id
+        WHERE a.state IN ('submitting','uncertain') AND e.sent_at IS NULL""")
+
+
+def replay_evidence():
+    # Idempotent outcome transitions allow recovery after a crash between applying
+    # an outcome and marking evidence processed. No message body is retained.
+    pending=rows("""SELECT r.*,a.state FROM reply_evidence r JOIN send_attempts a ON a.id=r.attempt_id
+        WHERE r.processed=0 AND a.state IN ('accepted','failed','canceled')""")
+    for item in pending:
+        if item['state']=='accepted':
+            if item['kind']=='human': tracker.mark_replied(item['email_id'])
+            else:
+                try: tracker.mark_bounced(item['email_id'])
+                except Conflict: pass
+        with get_connection() as conn:
+            conn.execute('UPDATE reply_evidence SET processed=1 WHERE scope=? AND uid=? AND attempt_id=?',
+                (item['scope'],item['uid'],item['attempt_id']))
+
 def _failed_recipients(message):
     recipients=set()
     if message.get_content_type()!="multipart/report" or not isinstance(message.get_payload(),list):
@@ -85,7 +109,9 @@ def check_replies(dry_run=False):
     from delivery import bind_mailbox
     with get_connection(immediate=True) as conn: bind_mailbox(conn)
     candidates=EmailRepository.get_sent_candidates_for_replies()
-    if not candidates:
+    unresolved=unresolved_candidates()
+    replay_evidence()
+    if not candidates and not unresolved:
         return []
     mailbox=None
     matches=[]
@@ -123,6 +149,7 @@ def check_replies(dry_run=False):
                     if raw is None: raise ProviderError("IMAP returned an unreadable delivery report")
                     message=email.message_from_bytes(raw)
             matched=[] if skip_report else matched_candidates(message,candidates)
+            held=[] if skip_report else matched_candidates(message,unresolved)
             for candidate in matched:
                 kind=classify(message)
                 matches.append({"email_id":candidate["id"],"contact_email":candidate["contact_email"],"match_type":"exact_thread","kind":kind})
@@ -134,6 +161,9 @@ def check_replies(dry_run=False):
                     else: tracker.mark_replied(candidate["id"])
             if not dry_run:
                 with get_connection() as conn:
+                    for candidate in held:
+                        conn.execute('INSERT OR IGNORE INTO reply_evidence(scope,uid,attempt_id,email_id,kind) VALUES (?,?,?,?,?)',
+                            (scope,str(uid),candidate['attempt_id'],candidate['id'],classify(message)))
                     conn.execute("INSERT OR IGNORE INTO reply_messages VALUES (?,?,?,?)",(scope,str(uid),message.get("Message-ID"),timestamp()))
                     conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)",("imap_cursor:"+scope,str(uid)))
         return matches

@@ -209,8 +209,9 @@ def test_due_followup_review_send_and_reply_closes_thread(browser_app,contact,mo
     page.get_by_role("button",name="Approve saved revision").click()
     expect(page.get_by_role("button",name="Approve saved revision")).to_have_count(0)
     open_view(page,"Queue")
+    page.get_by_role("button",name="Send approved batch",exact=True).click()
     with page.expect_response(lambda response:response.url.endswith("/api/send")) as queued:
-        page.get_by_role("button",name="Send approved batch",exact=True).click()
+        page.get_by_role("button",name="Send this batch",exact=True).click()
     assert queued.value.status==202
     assert jobs.process_next()
     assert jobs.list_jobs()[0]["result"]["counts"]["sent"]==1
@@ -281,8 +282,9 @@ def test_full_setup_review_send_workflow(browser_app):
     approve.click()
     open_view(page,"Queue")
     expect(page.get_by_role("cell",name='Reviewed "subject"',exact=True)).to_be_visible()
+    page.get_by_role("button",name="Send approved batch",exact=True).click()
     with page.expect_response(lambda response: response.url.endswith("/api/send") and response.request.method=="POST") as queued:
-        page.get_by_role("button",name="Send approved batch").click()
+        page.get_by_role("button",name="Send this batch",exact=True).click()
     assert queued.value.status==202
     assert jobs.process_next()
     result=jobs.list_jobs()[0]

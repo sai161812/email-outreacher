@@ -283,9 +283,22 @@ def create_app(overrides=None):
         return jsonify(jobs.enqueue("followup",{"email_id":eid},request_key())),202
     @app.post("/api/send")
     def send():
-        data=payload({"dry_run"})
+        data=payload({"dry_run","members","batch_sender"})
         if "dry_run" in data and type(data["dry_run"]) is not bool: raise ValueError("dry_run must be boolean")
+        if 'members' in data:
+            if not isinstance(data['members'],list) or len(data['members'])>10000: raise ValueError('Invalid batch members')
+            for member in data['members']:
+                if not isinstance(member,dict) or set(member)!={'id','revision'}: raise ValueError('Invalid batch member')
+                ident(member['id']);ident(member['revision'],'revision')
+            if len({m['id'] for m in data['members']})!=len(data['members']): raise ValueError('Duplicate batch members')
+        if 'batch_sender' in data and data['batch_sender']!=config.GMAIL_ADDRESS.strip().lower(): raise Conflict('Batch sender changed')
         return jsonify(jobs.enqueue("send",data,request_key())),202
+    @app.get('/api/send-plan')
+    def send_plan(): return jsonify(jobs.send_plan())
+    @app.post('/api/jobs/<int:jid>/stop')
+    def stop_job(jid):
+        payload(set());jobs.stop(jid)
+        return jsonify(success=True)
     @app.post("/api/check_replies")
     def check_replies():
         payload(set())

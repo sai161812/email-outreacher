@@ -4,7 +4,7 @@ import logging
 import uuid
 from db import get_connection
 from errors import Conflict,NotFound,AppError
-from repository import timestamp
+from repository import timestamp,JOINED
 
 KINDS={"compose","followup","send","replies"}
 
@@ -17,19 +17,31 @@ def public(row):
 def enqueue(kind,payload,request_key=None):
     if kind not in KINDS: raise ValueError("Unknown job kind")
     key=request_key or uuid.uuid4().hex
-    body=json.dumps(payload,sort_keys=True)
+    payload=dict(payload)
+    if kind=='send': payload['dry_run']=payload.get('dry_run',False)
+    def same(existing):
+        saved=json.loads(existing['payload'])
+        if kind=='send':
+            if 'members' not in payload: saved.pop('members',None)
+            if 'batch_sender' not in payload: saved.pop('batch_sender',None)
+        return saved==payload
     with get_connection(immediate=True) as conn:
         existing=conn.execute("SELECT * FROM jobs WHERE request_key=?",(key,)).fetchone()
         if existing:
-            if existing["kind"]!=kind or existing["payload"]!=body:
+            if existing["kind"]!=kind or not same(existing):
                 raise Conflict("Idempotency key was used with different inputs")
             return public(existing)
         if kind in {"send","replies"}:
             existing=conn.execute("SELECT * FROM jobs WHERE kind=? AND status IN ('pending','running')",(kind,)).fetchone()
             if existing:
-                if existing["payload"]!=body:
+                if not same(existing):
                     raise Conflict("Another operation of this kind is pending with different inputs; wait for its result")
                 return public(existing)
+        if kind=='send':
+            import config
+            payload.setdefault('members',[{'id':r['id'],'revision':r['revision']} for r in conn.execute("SELECT id,revision FROM emails WHERE status='approved' ORDER BY created_at,id")])
+            payload.setdefault('batch_sender',config.GMAIL_ADDRESS.strip().lower())
+        body=json.dumps(payload,sort_keys=True)
         now=timestamp()
         jid=conn.execute("INSERT INTO jobs(kind,payload,request_key,created_at,updated_at) VALUES (?,?,?,?,?)",(kind,body,key,now,now)).lastrowid
         return public(conn.execute("SELECT * FROM jobs WHERE id=?",(jid,)).fetchone())
@@ -44,11 +56,31 @@ def list_jobs():
     with get_connection() as conn:
         return [public(r) for r in conn.execute("SELECT * FROM jobs ORDER BY id DESC LIMIT 100")]
 
+
+def stop(jid):
+    with get_connection(immediate=True) as conn:
+        row=conn.execute('SELECT * FROM jobs WHERE id=?',(jid,)).fetchone()
+        if not row: raise NotFound('Job not found')
+        if row['kind']!='send': raise Conflict('Only send batches support stopping')
+        if row['status']=='pending':
+            conn.execute("UPDATE jobs SET status='canceled',updated_at=? WHERE id=?",(timestamp(),jid))
+        elif row['status']=='running':
+            conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)",(f'stop_job:{jid}','1'))
+        else: raise Conflict('This batch is already finished')
+
+
+def send_plan():
+    import config
+    with get_connection() as conn:
+        members=[dict(r) for r in conn.execute(JOINED+"WHERE e.status='approved' ORDER BY e.created_at,e.id")]
+    return {'sender':config.GMAIL_ADDRESS.strip().lower(),'members':members}
+
 def _dispatch(kind,payload,progress):
     if kind=="send":
         import sender
-        result=sender.run_send_batch(progress=progress,**payload)
-        return {"summary":result,"counts":{name:sum(r["status"]==name for r in result) for name in ("sent","failed","uncertain","skipped","deferred","dry_run")}}
+        if 'members' not in payload: raise Conflict('Legacy batch has no fixed recipients; queue a new reviewed batch')
+        result=sender.run_send_batch(progress=progress,stop_requested=getattr(progress,'stop_requested',lambda:False),**payload)
+        return {"summary":result,"counts":{name:sum(r["status"]==name for r in result) for name in ("sent","failed","uncertain","skipped","deferred","dry_run","canceled")}}
     if kind=="replies":
         import replies
         return {"matches":replies.check_replies()}
@@ -68,10 +100,14 @@ def process_next():
         with get_connection() as conn:
             conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('worker_heartbeat',?)",(timestamp(),))
             conn.execute("UPDATE jobs SET result=?,updated_at=? WHERE id=?",(json.dumps({"summary":result}),timestamp(),job["id"]))
+    def stop_requested():
+        with get_connection() as conn:
+            return bool(conn.execute('SELECT 1 FROM settings WHERE key=?',(f"stop_job:{job['id']}",)).fetchone())
+    progress.stop_requested=stop_requested
     try:
         result=_dispatch(job["kind"],job["payload"],progress)
         with get_connection() as conn:
-            conn.execute("UPDATE jobs SET status='complete',result=?,updated_at=? WHERE id=?",(json.dumps(result),timestamp(),job["id"]))
+            conn.execute("UPDATE jobs SET status=?,result=?,updated_at=? WHERE id=?",('canceled' if stop_requested() else 'complete',json.dumps(result),timestamp(),job["id"]))
     except Exception as exc:
         message=str(exc) if isinstance(exc,(AppError,ValueError)) else "Operation failed; check worker diagnostics"
         logging.error("job_failed job_id=%s kind=%s error_type=%s",job["id"],job["kind"],type(exc).__name__)

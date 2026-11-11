@@ -49,11 +49,13 @@ def _validate(conn,row):
         raise Conflict("Recipient already has a submitted outreach")
     return current
 
-def claim(eid):
+def claim(eid,expected_revision=None):
     with get_connection(immediate=True) as conn:
         row = require_email(conn,eid)
         if row["status"] != "approved":
             return None
+        if expected_revision is not None and row['revision']!=expected_revision:
+            raise Conflict('Batch revision changed; review again')
         approved = _validate(conn,row)
         bind_mailbox(conn)
         _quota(conn,row["company_id"])
@@ -129,3 +131,5 @@ def reconcile(attempt_id, accepted):
     if type(accepted) is not bool:
         raise ValueError("accepted must be boolean")
     finish(attempt_id,"accepted" if accepted else "failed","operator_reconciliation",expected_state="uncertain")
+    from replies import replay_evidence
+    replay_evidence()

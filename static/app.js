@@ -63,6 +63,15 @@ async function queued(path,data={}){
     document.getElementById("operation-status").textContent="Job #"+job.id+" is "+job.status+". A worker processes queued operations.";
     return job;
 }
+async function reviewBatch(){
+    const [plan,setup]=await Promise.all([api('/api/send-plan'),api('/api/settings')]);
+    const data={members:plan.members.map(r=>({id:r.id,revision:r.revision})),batch_sender:plan.sender};
+    const body=el('div',{},el('p',{},'Sender: '+(plan.sender||'Not configured')+' Â· '+plan.members.length+' messages Â· Daily remaining: '+setup.configuration.daily_remaining),
+        el('p',{},'Only these revisions are included. Changed messages are skipped. Delivery rechecks quotas, suppressions and the send window.'),
+        table(['Recipient','Company','Subject','Revision'],plan.members.map(r=>el('tr',{},cell(r.contact_email),cell(r.company_name),cell(r.subject,true),cell(r.revision)))));
+    const dialog=modal('Review send batch',body);
+    body.append(button('Preview this batch',()=>queued('/api/send',{...data,dry_run:true})),button('Send this batch',async()=>{await queued('/api/send',data);dialog.close();},'primary'));
+}
 async function navigate(next){
     await Promise.allSettled([...pendingWrites]);
     if(dirty.size&&!confirm("Leave without saving your edits?"))return;
@@ -78,7 +87,7 @@ async function render(){
 }
 async function dashboard(){
     const [data,setup]=await Promise.all([api("/api/stats"),api("/api/settings")]);settingsCache=setup;
-    const root=el("div",{},title("Dashboard",button("Refresh",render),button("Preview send batch",()=>queued("/api/send",{dry_run:true})),button("Send approved batch",()=>queued("/api/send"),"primary"),button("Check replies",()=>queued("/api/check_replies"))));
+    const root=el("div",{},title("Dashboard",button("Refresh",render),button("Preview send batch",()=>queued("/api/send",{dry_run:true})),button("Send approved batch",reviewBatch,"primary"),button("Check replies",()=>queued("/api/check_replies"))));
     const missing=Object.entries(setup.readiness).filter(([,ready])=>!ready).map(([key])=>key);
     if(missing.length)root.append(el("p",{class:"notice"},"Setup needed: "+missing.join(", ")+". Open Settings before drafting or sending."));
     root.append(el("p",{class:"notice"},"Daily remaining capacity: "+setup.configuration.daily_remaining+" of "+setup.configuration.daily_cap+". Outstanding uncertain attempts consume capacity."));
@@ -99,7 +108,7 @@ async function contactsView(){
     file.addEventListener("change",async()=>{if(!file.files.length)return;const form=new FormData();form.append("file",file.files[0]);try{const r=await api("/api/contacts/import","POST",form);toast(r.contacts_created+" contacts added; "+r.duplicates_skipped+" duplicates skipped.");if(r.errors.length)toast(r.errors.map(e=>"Row "+e.row+": "+e.error).join("; "),true);await render();}catch(e){toast(e.message,true);}finally{file.value="";}});
     const root=el("div",{},title("Contacts",button("Add contact",()=>contactForm(companies)),button("Search",async()=>{contactSearch=search.value;contactsOffset=0;await render();})),field("Search name, company or email",search),field("Import CSV",file));
     root.append(field("Resume for new drafts",draftResume));
-    root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"—",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>draftFor(p)),button("Edit",()=>contactForm(companies,p)),button("Check DNS",async()=>{const result=await api("/api/contacts/"+p.id+"/validate","POST",{});toast((result.warning||"Domain accepts mail in DNS")+". "+result.note,!!result.warning);})))))));
+    root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"â€”",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>draftFor(p)),button("Edit",()=>contactForm(companies,p)),button("Check DNS",async()=>{const result=await api("/api/contacts/"+p.id+"/validate","POST",{});toast((result.warning||"Domain accepts mail in DNS")+". "+result.note,!!result.warning);})))))));
     if(!people.length)root.append(el("p",{},"No contacts found. Add a company first, or import the sample CSV."));
     root.append(el("div",{class:"actions"},button("Previous",async()=>{contactsOffset=Math.max(0,contactsOffset-100);await render();}),button("Next",async()=>{if(people.length===100){contactsOffset+=100;await render();}})));
     return root;
@@ -115,7 +124,7 @@ function contactForm(companies,person=null){
 }
 async function companiesView(){
     const companies=await api("/api/companies?limit=100&offset="+offsets.Companies);
-    const root=el("div",{},title("Companies",button("Add company",()=>companyForm())),table(["Company","Domain","Contacts","Actions"],companies.map(c=>el("tr",{},cell(c.name,true),cell(c.domain||"—"),cell(c.contact_count),cell(el("div",{class:"actions"},button("Edit",()=>companyForm(c)),button("Add contact",()=>contactForm([c]))))))));
+    const root=el("div",{},title("Companies",button("Add company",()=>companyForm())),table(["Company","Domain","Contacts","Actions"],companies.map(c=>el("tr",{},cell(c.name,true),cell(c.domain||"â€”"),cell(c.contact_count),cell(el("div",{class:"actions"},button("Edit",()=>companyForm(c)),button("Add contact",()=>contactForm([c]))))))));
     paginate(root,"Companies",companies);return root;
 }
 function companyForm(company=null){
@@ -133,9 +142,9 @@ async function reviewView(){
         const subject=input(draft.subject),hook=input(draft.hook),body=el("textarea",{value:draft.body||"",rows:8});
         const variant=select([[0,"No resume"],...setup.resumes.map(r=>[r.id,r.name])],draft.resume_variant_id||0);
         const warnings=el("p",{class:"warning"},draft.qc_warnings||"Review facts, recipient, content and resume before approving.");
-        const status=el("p",{class:"muted"},"Revision "+draft.revision+" · Pending review · Sender: "+(setup.configuration.sender||"Configure Gmail before approving"));
+        const status=el("p",{class:"muted"},"Revision "+draft.revision+" Â· Pending review Â· Sender: "+(setup.configuration.sender||"Configure Gmail before approving"));
         const approve=button("Approve saved revision",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"approve",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Approved. Available in Queue.");},true),"primary",()=>writing||dirty.has(draft.id));
-        const section=card(draft.company_name+" · "+draft.contact_email,status,field("Subject",subject),field("Research hook",hook),field("Body",body),field("Resume choice",variant),warnings);
+        const section=card(draft.company_name+" Â· "+draft.contact_email,status,field("Subject",subject),field("Research hook",hook),field("Body",body),field("Resume choice",variant),warnings);
         function syncActions(){save.disabled=writing;reject.disabled=writing;approve.disabled=writing||dirty.has(draft.id);}
         async function writeReview(action,lockInputs=false){
             if(writing)return;
@@ -144,7 +153,7 @@ async function reviewView(){
             try{await action();}
             finally{writing=false;for(const node of [subject,hook,body,variant])node.disabled=false;syncActions();}
         }
-        const mark=()=>{editSerial++;dirty.add(draft.id);approve.disabled=true;status.textContent="Unsaved edits — save before approving";};
+        const mark=()=>{editSerial++;dirty.add(draft.id);approve.disabled=true;status.textContent="Unsaved edits â€” save before approving";};
         for(const node of [subject,hook,body,variant])node.addEventListener("input",mark);
         section.append(el("details",{},el("summary",{},"Research notes and sources"),el("p",{class:"warning"},"AI-written notes and URLs require independent verification."),el("pre",{},draft.research_notes||"No source evidence saved; verify company claims independently."),
             el("ul",{class:"sources"},[...new Set((draft.research_notes||"").match(/https:\/\/[^\s<>]+/g)||[])].map(url=>el("li",{},safeLink(url,url)))),
@@ -165,7 +174,7 @@ async function reviewView(){
             draft=result.email;
             if(savingSerial===editSerial)dirty.delete(draft.id);
             warnings.textContent=draft.qc_warnings||"No deterministic warnings; verify all facts.";
-            status.textContent=dirty.has(draft.id)?"Newer unsaved edits — save before approving":"Revision "+draft.revision+" · Saved, awaiting approval";
+            status.textContent=dirty.has(draft.id)?"Newer unsaved edits â€” save before approving":"Revision "+draft.revision+" Â· Saved, awaiting approval";
             toast(dirty.has(draft.id)?"Earlier edits saved. Save the newer edits before approving.":"Saved. Approval is still required.");
         }),"",()=>writing);
         reject=button("Reject",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"reject",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Draft rejected.");},true),"danger",()=>writing);
@@ -176,7 +185,7 @@ async function reviewView(){
 }
 async function queueView(){
     const items=await api("/api/queue?limit=100&offset="+offsets.Queue);
-    const root=el("div",{},title("Approved queue",button("Send approved batch",()=>queued("/api/send"),"primary")),el("p",{},"Only the approved revision and attachment may send. Caps, suppression and send windows are checked again at delivery."),
+    const root=el("div",{},title("Approved queue",button("Send approved batch",reviewBatch,"primary")),el("p",{},"Only the approved revision and attachment may send. Caps, suppression and send windows are checked again at delivery."),
         table(["Company","Recipient","Subject","Actions"],items.map(r=>el("tr",{},cell(r.company_name,true),cell(r.contact_email),cell(r.subject,true),cell(button("Return to review",async()=>{await api("/api/review/"+r.id,"POST",{action:"edit",revision:r.revision});await render();}))))));
     paginate(root,"Queue",items);return root;
 }
@@ -202,9 +211,9 @@ async function trackingView(){
 }
 async function settingsView(){
     const setup=await api("/api/settings");settingsCache=setup;
-    const readiness=el("p",{},Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"configured":"needed")).join(" · "));
+    const readiness=el("p",{},Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"configured":"needed")).join(" Â· "));
     const root=el("div",{},title("Settings"),card("Readiness",readiness,el("p",{class:"muted"},"Provider connections have not been verified. Configuration presence alone does not establish account access."),
-        el("p",{class:"muted"},"Model: "+setup.configuration.model+" · Timezone: "+setup.configuration.timezone+" · Resume mode: "+setup.configuration.resume_mode)));
+        el("p",{class:"muted"},"Model: "+setup.configuration.model+" Â· Timezone: "+setup.configuration.timezone+" Â· Resume mode: "+setup.configuration.resume_mode)));
     const fields={};for(const key of ["full_name","email","phone","linkedin_url","github_url","portfolio_url"])fields[key]=input(setup.profile?.[key],key.includes("url")?"url":key==="email"?"email":"text");
     const context=el("textarea",{value:setup.candidate_context,rows:6});
     let editSerial=0;
@@ -217,7 +226,7 @@ async function settingsView(){
     }
     async function refreshLists(){const serial=++listSerial;const data=await api("/api/settings");if(serial===listSerial){settingsCache=data;showLists(data);}}
     showLists(setup);
-    root.append(card("Profile and verified candidate facts",Object.entries(fields).map(([key,node])=>field(key.replaceAll("_"," "),node)),field("Candidate facts — include only truthful skills and achievements",context),
+    root.append(card("Profile and verified candidate facts",Object.entries(fields).map(([key,node])=>field(key.replaceAll("_"," "),node)),field("Candidate facts â€” include only truthful skills and achievements",context),
         button("Preview legacy context.txt",async()=>{if(context.value.trim()&&!confirm("Replace the visible facts with a preview of context.txt? Saved facts will change only when you save."))return;const data=await api("/api/settings/legacy-context");context.value=data.candidate_context;context.dispatchEvent(new Event("input"));context.focus();toast("Legacy facts loaded for review. Check them, then save profile and facts to import.");}),
         button("Save profile and facts",async()=>{
             const savingSerial=editSerial;
@@ -225,7 +234,7 @@ async function settingsView(){
             await api("/api/settings","POST",data);
             if(savingSerial===editSerial)dirty.delete("settings");
             setup.readiness.profile=true;setup.readiness.context=!!data.candidate_context.trim();
-            readiness.textContent=Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"ready":"needed")).join(" · ");
+            readiness.textContent=Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"ready":"needed")).join(" Â· ");
             toast(dirty.has("settings")?"Profile and facts saved. Newer edits remain unsaved.":"Profile and facts saved.");
         },"primary")));
     const name=input(),keywords=input(),url=input("","url"),file=el("input",{type:"file",accept:".pdf"});
@@ -249,7 +258,7 @@ async function settingsView(){
 async function jobsView(){
     const jobs=await api("/api/jobs");
     return el("div",{},title("Jobs",button("Refresh",render)),el("p",{class:"notice"},"Operations remain queued until the background worker is running. This view refreshes automatically."),
-        jobs.map(j=>card("#"+j.id+" · "+j.kind+" · "+j.status,j.error?el("p",{class:"error"},j.error):null,j.result?.counts?el("p",{},Object.entries(j.result.counts).map(([name,count])=>name+": "+count).join(" · ")):null,el("details",{open:j.status==="failed"?"":undefined},el("summary",{},"Results"),el("pre",{},j.result?JSON.stringify(j.result,null,2):"No result yet")))));
+        jobs.map(j=>card("#"+j.id+" Â· "+j.kind+" Â· "+j.status,j.kind==="send"&&["pending","running"].includes(j.status)?button(j.status==="pending"?"Cancel batch":"Stop remaining",async()=>{await api("/api/jobs/"+j.id+"/stop","POST",{});await render();toast("Stop requested. A message already being submitted cannot be recalled.");}):null,j.error?el("p",{class:"error"},j.error):null,j.result?.counts?el("p",{},Object.entries(j.result.counts).map(([name,count])=>name+": "+count).join(" Â· ")):null,el("details",{open:j.status==="failed"?"":undefined},el("summary",{},"Results"),el("pre",{},j.result?JSON.stringify(j.result,null,2):"No result yet")))));
 }
 function paginate(root,name,items){
     const previous=button("Previous",async()=>{if(dirty.size&&!confirm("Leave without saving your draft edits?"))return;dirty.clear();offsets[name]=Math.max(0,offsets[name]-100);await render();});
@@ -262,8 +271,8 @@ async function pollOperation(){
     if(!loggedIn||!operationId)return;
     const job=await api("/api/jobs/"+operationId);
     const counts=job.result?.counts?": "+Object.entries(job.result.counts).map(([key,value])=>key+" "+value).join(", "):"";
-    document.getElementById("operation-status").textContent="Job #"+job.id+" · "+job.status+counts+(job.error?" · "+job.error:"");
-    if(["complete","failed"].includes(job.status))operationId=null;
+    document.getElementById("operation-status").textContent="Job #"+job.id+" Â· "+job.status+counts+(job.error?" Â· "+job.error:"");
+    if(["complete","failed","canceled"].includes(job.status))operationId=null;
 }
 const loaders={Dashboard:dashboard,Contacts:contactsView,Companies:companiesView,Review:reviewView,Queue:queueView,Tracking:trackingView,Settings:settingsView,Jobs:jobsView};
 async function loginScreen(){

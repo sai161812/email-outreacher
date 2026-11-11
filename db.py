@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS suppressions (
 """
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 STATUSES = ("pending_review", "approved", "sending", "sent", "replied", "ghosted",
             "bounced", "interview_scheduled", "interview_completed", "offer", "no_offer",
             "rejected", "failed", "uncertain", "canceled")
@@ -162,6 +162,11 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS reply_messages (
  uidvalidity TEXT NOT NULL, uid TEXT NOT NULL, message_id TEXT, processed_at TEXT NOT NULL,
  PRIMARY KEY(uidvalidity,uid)
+);
+CREATE TABLE IF NOT EXISTS reply_evidence (
+ scope TEXT NOT NULL, uid TEXT NOT NULL, attempt_id INTEGER NOT NULL REFERENCES send_attempts(id),
+ email_id INTEGER NOT NULL REFERENCES emails(id), kind TEXT NOT NULL, processed INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(scope,uid,attempt_id)
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS migration_reports (kind TEXT NOT NULL, count INTEGER NOT NULL);
