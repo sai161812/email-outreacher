@@ -1,5 +1,7 @@
 # Milestone 2 — delivery and reply correctness
 
+Status: **Complete**. Final application source: `1d7b92763c398cfe4e02ea9a260fb6cbf7b5a651`.
+
 Scope: R03–R08 of `RELIABILITY_AND_HIRING_PLAN.md`. Milestone 1 personal
 resume/facts setup remains deferred to Milestone 5. Milestones 3–5 are outside
 this implementation.
@@ -40,7 +42,25 @@ bundle restore in ignored `backups/milestone2-e9164b90`. All 6 companies, 15 con
 1 submitted email and 2 resume registrations were preserved, along with exact
 submitted content/status/timestamp. Integrity and foreign-key checks passed.
 
-Implementation commits already pushed: `a6bdd20` (R03), `634764a` (R05),
-`57ee6d6` (fixed batches and retained evidence). Final verification and remaining
-commit identifiers are recorded after the final gates. All automated providers
-are synthetic; no live message or paid AI request is used for acceptance.
+Implementation commits pushed: `a6bdd20` (R03), `634764a` (R05),
+`57ee6d6` (fixed batches and retained evidence), `1d7b927` (complete scans,
+rejection policy and final regressions).
+
+Final verification on 11 November 2026:
+
+- `.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider`: **258 passed**
+  in 56.18 seconds, including all 11 Chromium browser cases.
+- Source/private-file/common-credential checks, JavaScript syntax, whitespace
+  checks and `pip check`: passed.
+- Installed dependency advisory audit: no known vulnerabilities found.
+- `dist/email-outreacher-1d7b92763c39.zip` was built from the exact committed
+  source and passed a fresh hashed dependency install, Waitress read routes,
+  schema 5 initialization/integrity, worker startup and SQLite backup smoke check.
+- Following rehearsal, the live database was automatically backed up and
+  migrated to schema 5. Exact submitted content/status/timestamps were unchanged;
+  integrity is `ok`, foreign-key violations are zero and migration reports are empty.
+
+All automated providers are synthetic; no live message or paid AI request was
+used for acceptance. Gmail/Gemini account acceptance and the owner's actual resume
+remain scheduled for Milestone 5. The final verification documentation commit
+does not change the tested application code.

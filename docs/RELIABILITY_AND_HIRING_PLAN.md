@@ -6,6 +6,8 @@ Milestone 1 is complete under the revised scope, with 231 passing tests; see
 [MILESTONE_1.md](MILESTONE_1.md). At the owner's request, personal resume
 registration and candidate-facts review are deferred to Milestone 5 / R16,
 before controlled live acceptance. They do not block Milestones 2–4.
+Milestone 2 / R03–R08 is also complete: see [MILESTONE_2.md](MILESTONE_2.md)
+for 258 passing tests, schema 5 migration and exact committed-release verification.
 The findings below preserve the pre-implementation review baseline.
 
 **Decision:** keep Flask, SQLite, the single worker, Gmail SMTP/IMAP, Gemini and the current browser UI. The project has a useful foundation. Finish operational setup, close the remaining delivery/recovery gaps, then improve how the candidate demonstrates fit. A rewrite would increase risk without improving the intended workflow.
@@ -34,7 +36,7 @@ The previous A01–A52 audit remains historical evidence. This plan records curr
 | Milestone | Work | Exit condition |
 | --- | --- | --- |
 | 1. Reproducible local operation | R01–R02 | Supported runtime, verified baseline, migration/restore and asset validation pass using synthetic fixtures; complete |
-| 2. Delivery and reply correctness | R03–R08 | Ambiguous sends cannot become retryable failures; intended recipients and identity stay fixed; replies survive recovery |
+| 2. Delivery and reply correctness | R03–R08 | Complete: uncertain recovery, fixed batches, sender identity, retained replies, fresh scans and rejection policy verified |
 | 3. Useful, truthful outreach | R09–R11 | AI-independent drafting, explicit role/evidence context and measured draft quality |
 | 4. Finish everyday workflows | R12–R15 | Actionable jobs, recoverable requests, usable assets/forms and understandable outcomes |
 | 5. Release and account acceptance | R16–R17 | Personal resume/facts setup, clean release/restore gates and separately authorized controlled live acceptance |

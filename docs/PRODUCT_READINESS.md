@@ -1,5 +1,12 @@
 # Product acceptance and startup
 
+Current Milestone 2 application source **1d7b927** passed **258 tests**, including
+11 Chromium cases, source/dependency checks and a clean committed-release install
+on 11 November 2026. The live database is now schema 5 with preserved submitted
+history. See [Milestone 2 acceptance](MILESTONE_2.md) for current evidence. Personal
+resume/facts setup and live account acceptance remain deferred to Milestone 5.
+The October results below are preserved as historical verification.
+
 The local single-owner application passed the updated acceptance suite on source commit **b1b1e26** (9 October 2026): **223 tests**, including 11 real Chromium workflows/checks against fake providers, source checks, dependency checks and an isolated installation of the committed source ZIP. The release smoke check exercised Waitress, schema initialization/integrity, worker startup and SQLite backup. No real emails or paid AI requests were used.
 
 The overall workflow review passed 223 tests and all Windows/Linux release gates in [run 37949776032](https://github.com/sai161812/email-outreacher/actions/runs/37949776032). The tested local package is `dist/email-outreacher-b1b1e26f7092.zip`. See [WORKFLOW_AUDIT.md](WORKFLOW_AUDIT.md) and `audit/2026-10-09/workflow_verification.json` for the seven additional defects repaired. Drafting guidance remains in [DRAFTING_QUALITY.md](DRAFTING_QUALITY.md); its earlier verification is preserved in `audit/2026-10-09/drafting_verification.json`.
