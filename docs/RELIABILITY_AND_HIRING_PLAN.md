@@ -8,6 +8,10 @@ registration and candidate-facts review are deferred to Milestone 5 / R16,
 before controlled live acceptance. They do not block Milestones 2–4.
 Milestone 2 / R03–R08 is also complete: see [MILESTONE_2.md](MILESTONE_2.md)
 for 258 passing tests, schema 5 migration and exact committed-release verification.
+Milestone 3 implementation is recorded in [MILESTONE_3.md](MILESTONE_3.md):
+R09/R10 are complete and R11 tooling is verified with 273 tests. At the owner's
+request, R11 live-provider/human quality acceptance stays pending in Milestone 3;
+it has not been moved to Milestone 5 or counted as passing.
 The findings below preserve the pre-implementation review baseline.
 
 **Decision:** keep Flask, SQLite, the single worker, Gmail SMTP/IMAP, Gemini and the current browser UI. The project has a useful foundation. Finish operational setup, close the remaining delivery/recovery gaps, then improve how the candidate demonstrates fit. A rewrite would increase risk without improving the intended workflow.
@@ -37,7 +41,7 @@ The previous A01–A52 audit remains historical evidence. This plan records curr
 | --- | --- | --- |
 | 1. Reproducible local operation | R01–R02 | Supported runtime, verified baseline, migration/restore and asset validation pass using synthetic fixtures; complete |
 | 2. Delivery and reply correctness | R03–R08 | Complete: uncertain recovery, fixed batches, sender identity, retained replies, fresh scans and rejection policy verified |
-| 3. Useful, truthful outreach | R09–R11 | AI-independent drafting, explicit role/evidence context and measured draft quality |
+| 3. Useful, truthful outreach | R09–R11 | R09/R10 complete; evaluation tooling implemented; R11 live-output/human acceptance pending |
 | 4. Finish everyday workflows | R12–R15 | Actionable jobs, recoverable requests, usable assets/forms and understandable outcomes |
 | 5. Release and account acceptance | R16–R17 | Personal resume/facts setup, clean release/restore gates and separately authorized controlled live acceptance |
 

@@ -1,5 +1,11 @@
 # Product acceptance and startup
 
+Milestone 3 application source **beaf2bf** passed **273 automated tests**, including
+12 browser cases, clean committed-release installation and schema 6 migration/
+restore checks. See [Milestone 3 evidence](MILESTONE_3.md). R09/R10 are complete;
+R11 live draft quality and human ratings remain pending in Milestone 3. This is
+not a claim that the entire hiring plan or live account acceptance is complete.
+
 Current Milestone 2 application source **1d7b927** passed **258 tests**, including
 11 Chromium cases, source/dependency checks and a clean committed-release install
 on 11 November 2026. The live database is now schema 5 with preserved submitted

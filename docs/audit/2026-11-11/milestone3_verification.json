@@ -1,0 +1,21 @@
+{
+  "application_commit": "beaf2bf6178eb9a755924d7fdf54988a57c443f3",
+  "scope": ["R09", "R10", "R11"],
+  "status": "implementation_verified_R11_acceptance_pending",
+  "completed_items": ["R09", "R10"],
+  "implemented_pending_acceptance": ["R11"],
+  "implementation_commits": ["0eb0a87", "ad34be9", "78e8dd3", "beaf2bf"],
+  "regression": {"passed": 273, "failed": 0, "browser_cases": 12, "duration_seconds": 58.88},
+  "source_and_javascript_checks": "passed",
+  "dependency_compatibility": "passed",
+  "dependency_advisories": "no known vulnerabilities found",
+  "committed_release": "dist/email-outreacher-beaf2bf6178e.zip",
+  "clean_runtime_smoke": "passed",
+  "migration_and_restore_rehearsal": "passed",
+  "live_database": {"schema_version": 6, "integrity": "ok", "foreign_key_violations": 0, "submitted_history_preserved": true},
+  "evaluation": {"reference_cases": 12, "reference_provider_calls": 0, "reference_hard_blockers": 0, "live_outputs_generated": 0, "human_ratings": "pending", "release_quality_gate": "not_evaluated"},
+  "remaining_in_milestone_3": ["Configure Gemini for an explicitly authorized bounded live evaluation", "Generate 12 actual outputs and obtain explicit human ratings", "Verify zero unsupported claims and at least 10 samples needing no substantial rewrite"],
+  "owner_scope_decision": "Keep R11 acceptance pending in Milestone 3",
+  "emails_sent": 0,
+  "later_milestones_implemented": false
+}

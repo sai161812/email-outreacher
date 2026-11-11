@@ -58,10 +58,34 @@ within R11, not silently deferred or treated as passing.
 
 **Verification**
 
+Final application source: `beaf2bf6178eb9a755924d7fdf54988a57c443f3`.
+Implementation commits were pushed individually: `0eb0a87` (R09), `ad34be9`
+(R10), `78e8dd3` (R11 tooling), and `beaf2bf` (project-choice timing repair).
+
 Targeted service/API/browser cases cover manual-to-approved fake SMTP delivery,
 failed/stale regeneration, suppression/duplicate blocks, no-resume follow-ups,
 two roles at one company, source snapshots, acknowledgment invalidation,
 role-aware resume matching, migration backfill, browser project/target/manual
-review, reference output labeling and scorer hard failures. Final suite/release
-and migration evidence follows the implementation commits. Providers are fake
-in regression checks; no real email or paid model request is used for testing.
+review, reference output labeling and scorer hard failures. The browser suite
+reproduced a stale project-choice race after saving a project; loading current
+choices before opening role briefs and retaining the modal until refresh fixed it.
+
+- Full suite: **273 passed**, including **12 browser cases**, in 58.88 seconds.
+- Source syntax/private-file checks, JavaScript syntax, whitespace and `pip check`: passed.
+- Current dependency advisory scan: no known vulnerabilities found.
+- Exact committed source ZIP `dist/email-outreacher-beaf2bf6178e.zip`: passed
+  clean hashed installation, Waitress read routes, schema 6 initialization and
+  integrity, worker startup and SQLite-consistent backup smoke checks.
+- Actual schema 5 data was rehearsed through migration and bundle restore under
+  ignored `backups/milestone3-09659eb8`: all 6 companies, 15 contacts, 1 email and
+  2 resume registrations remained, with exact submitted content/status/timestamps.
+  The live database then migrated after automatic backup. Integrity is `ok`,
+  foreign-key violations are zero and migration reports are empty.
+- `scripts/evaluate_drafts.py --output test-results/milestone3-reference-evaluation.json`
+  exported 12 curated reference cases without provider calls. None has a known
+  forbidden-claim trap hit or deterministic blocker. This establishes neither
+  live factual accuracy nor human quality acceptance; human ratings remain pending.
+
+Providers are fake in regression checks; no real email or paid model request was
+used for testing. R11's live 12-case / 10-acceptable-sample gate is **not claimed
+passed**. Later milestones were not implemented.
