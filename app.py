@@ -284,14 +284,28 @@ def create_app(overrides=None):
             data["resume_variant_id"]=selected["id"] if selected else None
         if data["resume_variant_id"] is not None: resume.delivery_asset(ident(data["resume_variant_id"],"resume_variant_id"))
         return jsonify(jobs.enqueue("compose",data,request_key())),202
+    @app.post('/api/drafts/manual')
+    def manual_draft():
+        data=payload({'company_id','contact_id','subject','body','resume_variant_id','follow_up_to_email_id'},{'company_id','contact_id','subject','body'})
+        for key in ('company_id','contact_id'): ident(data[key],key)
+        for key in ('resume_variant_id','follow_up_to_email_id'):
+            if data.get(key) is not None: ident(data[key],key)
+        return jsonify(id=composer.manual_draft(**data)),201
+    @app.post('/api/review/<int:eid>/regenerate')
+    def regenerate(eid):
+        data=payload({'revision','resume_variant_id'},{'revision'})
+        ident(data['revision'],'revision')
+        if data.get('resume_variant_id') is not None: resume.delivery_asset(ident(data['resume_variant_id']))
+        return jsonify(jobs.enqueue('regenerate',{'email_id':eid,**data},request_key())),202
     @app.post("/api/tracking/<int:eid>/followup")
     def followup(eid):
-        payload(set())
+        data=payload({'resume_variant_id'})
+        if data.get('resume_variant_id') is not None: resume.delivery_asset(ident(data['resume_variant_id']))
         original=EmailRepository.get_by_id(eid)
         if not original: raise NotFound("Email not found")
         import followups
         with db.get_connection() as conn: followups.check(conn,{**original,"follow_up_to_email_id":eid})
-        return jsonify(jobs.enqueue("followup",{"email_id":eid},request_key())),202
+        return jsonify(jobs.enqueue("followup",{"email_id":eid,**data},request_key())),202
     @app.post("/api/send")
     def send():
         data=payload({"dry_run","members","batch_sender"})

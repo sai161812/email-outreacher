@@ -6,7 +6,7 @@ from db import get_connection
 from errors import Conflict,NotFound,AppError
 from repository import timestamp,JOINED
 
-KINDS={"compose","followup","send","replies"}
+KINDS={"compose","followup","regenerate","send","replies"}
 
 def public(row):
     item=dict(row)
@@ -91,7 +91,8 @@ def _dispatch(kind,payload,progress):
     import composer
     if kind=="compose":
         return {"id":composer.compose_and_store(**payload)}
-    return {"id":composer.compose_follow_up_and_store(payload["email_id"])}
+    if kind=='regenerate': return {'id':composer.regenerate(**payload)}
+    return {"id":composer.compose_follow_up_and_store(payload["email_id"],**{k:v for k,v in payload.items() if k!='email_id'})}
 
 def process_next():
     with get_connection(immediate=True) as conn:

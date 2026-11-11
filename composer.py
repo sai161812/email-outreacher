@@ -18,6 +18,7 @@ from errors import Conflict,ProviderError
 from repository import EmailRepository,SuppressionRepository,timestamp
 
 MAX_GENERATION_CALLS=3
+UNSET=object()
 
 class EmailDraft(BaseModel):
     model_config=ConfigDict(str_strip_whitespace=True)
@@ -268,7 +269,7 @@ def compose_follow_up(original_email_id,context=None):
         "company_name":company["name"],"recipient_title":contact.get("title"),"audience_guidance":_audience_guidance(contact),
         "verified_candidate_facts":context or candidate_context()},ensure_ascii=False),FollowUpDraft,FOLLOW_UP_SYSTEM_PROMPT)
 
-def compose_follow_up_and_store(original_email_id):
+def compose_follow_up_and_store(original_email_id,resume_variant_id=UNSET):
     original=EmailRepository.get_by_id(original_email_id)
     if not original:
         from errors import NotFound
@@ -279,7 +280,8 @@ def compose_follow_up_and_store(original_email_id):
     if not profile:
         raise ValueError("Set up your profile before drafting")
     _build_signature(profile)
-    _,contact=_preflight(original["company_id"],original["contact_id"],context,original["resume_variant_id"])
+    variant=original['resume_variant_id'] if resume_variant_id is UNSET else resume_variant_id
+    _,contact=_preflight(original["company_id"],original["contact_id"],context,variant)
     root=original["thread_root_id"] or original["id"]
     key=f"generation:followup:{root}"
     token=_reserve(key)
@@ -299,8 +301,47 @@ def compose_follow_up_and_store(original_email_id):
             raise ProviderError("Generated follow-up failed content checks")
         with get_connection() as conn:
             followups.check(conn,proposed)
-        return EmailRepository.create(original["company_id"],original["contact_id"],original["resume_variant_id"],
+        return EmailRepository.create(original["company_id"],original["contact_id"],variant,
             original["hook"],subject,body,"; ".join(dict.fromkeys(qc.warnings(subject,body,True)+generated.get("quality_warnings",[]))),original_email_id,
             original.get("research_notes"))
     finally:
         _release(key,token)
+
+
+def manual_draft(company_id,contact_id,subject,body,resume_variant_id=None,follow_up_to_email_id=None):
+    _,contact=_preflight(company_id,contact_id,'Owner-written draft',resume_variant_id)
+    if not isinstance(subject,str) or not isinstance(body,str): raise ValueError('Subject and pitch must be text')
+    full_body=_body(body,contact)
+    errors=qc.blockers(subject,full_body)
+    if errors: raise ValueError('; '.join(errors))
+    if follow_up_to_email_id:
+        parent=EmailRepository.get_by_id(follow_up_to_email_id)
+        if not parent: raise Conflict('Original email not found')
+        subject=parent['subject'] if parent['subject'].lower().startswith('re:') or len(parent['subject'])>196 else 'Re: '+parent['subject']
+    return EmailRepository.create(company_id,contact_id,resume_variant_id,'Owner-written',subject,full_body,
+        '; '.join(qc.warnings(subject,full_body,bool(follow_up_to_email_id))),follow_up_to_email_id,
+        research_notes='Owner-written draft; verify claims before approval.')
+
+
+def regenerate(email_id,revision,resume_variant_id=UNSET):
+    original=EmailRepository.get_by_id(email_id)
+    if not original or original['revision']!=revision or original['status'] not in {'pending_review','approved'}:
+        raise Conflict('Draft changed or is unavailable; reload before regenerating')
+    candidate=candidate_profile.get_settings()
+    variant=original['resume_variant_id'] if resume_variant_id is UNSET else resume_variant_id
+    company,contact=_preflight(original['company_id'],original['contact_id'],candidate['candidate_context'],variant)
+    key='generation:'+contact['email'].strip().lower();token=_reserve(key)
+    try:
+        is_followup=bool(original['follow_up_to_email_id'])
+        with get_connection() as conn: followups.check(conn,original,for_existing=True)
+        generated=compose_follow_up(original['follow_up_to_email_id'],candidate['candidate_context']) if is_followup else compose_email(company,contact,candidate['candidate_context'])
+        parsed=(FollowUpDraft if is_followup else EmailDraft).model_validate(generated)
+        subject=original['subject'] if is_followup else parsed.subject
+        body=_body(parsed.body,contact,candidate['profile'])
+        if qc.blockers(subject,body): raise ProviderError('Regenerated draft failed content checks')
+        EmailRepository.replace_generated(email_id,revision,{'subject':subject,'body':body,'hook':generated.get('hook',original['hook']),
+            'resume_variant_id':variant,'research_notes':generated.get('research_notes',original['research_notes']),
+            'grounding_json':json.dumps(generated.get('grounding',[])),
+            'qc_warnings':'; '.join(qc.warnings(subject,body,is_followup)+generated.get('quality_warnings',[]))})
+        return email_id
+    finally: _release(key,token)

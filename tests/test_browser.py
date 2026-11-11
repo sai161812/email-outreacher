@@ -199,8 +199,9 @@ def test_due_followup_review_send_and_reply_closes_thread(browser_app,contact,mo
     monkeypatch.setattr(composer,"compose_follow_up",lambda *args:{"subject":"Re: Original subject","body":"Following up on my Python dashboard experience. Open to a brief chat?"})
     page.goto(url)
     open_view(page,"Tracking")
+    page.get_by_role("button",name="Draft follow-up",exact=True).click()
     with page.expect_response(lambda response:response.url.endswith(f"/api/tracking/{original}/followup")) as queued:
-        page.get_by_role("button",name="Draft follow-up",exact=True).click()
+        page.get_by_role("button",name="Generate follow-up",exact=True).click()
     assert queued.value.status==202
     assert jobs.process_next()
     job=jobs.list_jobs()[0]

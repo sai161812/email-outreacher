@@ -188,6 +188,12 @@ class EmailRepository:
     @staticmethod
     def create(company_id, contact_id, resume_variant_id, hook, subject, body, qc_warnings, follow_up_to_email_id=None, research_notes=None, grounding_json=None):
         with get_connection(immediate=True) as conn:
+            ct=conn.execute('SELECT email,archived FROM contacts WHERE id=?',(contact_id,)).fetchone()
+            company=conn.execute('SELECT archived FROM companies WHERE id=?',(company_id,)).fetchone()
+            if not ct or ct['archived'] or not company or company['archived']:
+                raise Conflict('Contact/company is unavailable')
+            if conn.execute('SELECT 1 FROM suppressions WHERE lower(trim(email))=?',(ct['email'].strip().lower(),)).fetchone():
+                raise Conflict('Recipient is suppressed')
             root = None
             if follow_up_to_email_id:
                 parent = require_email(conn, follow_up_to_email_id)
@@ -202,6 +208,21 @@ class EmailRepository:
                 raise Conflict("Invalid relationship or recipient already has active outreach") from exc
             event(conn,eid,"draft_created")
             return eid
+    @staticmethod
+    def replace_generated(eid,expected_revision,generated):
+        with get_connection(immediate=True) as conn:
+            row=require_email(conn,eid);check_revision(row,expected_revision)
+            if row['sent_at'] or row['status'] not in {'pending_review','approved'}:
+                raise Conflict('Only an unsent pending or approved draft can be regenerated')
+            snapshot(conn,{**row,'resume_variant_id':generated['resume_variant_id']})
+            if conn.execute('SELECT 1 FROM suppressions WHERE lower(trim(email))=(SELECT lower(trim(email)) FROM contacts WHERE id=?)',(row['contact_id'],)).fetchone():
+                raise Conflict('Recipient is suppressed')
+            import followups
+            followups.check(conn,row,for_existing=True)
+            conn.execute("""UPDATE emails SET subject=?,body=?,hook=?,resume_variant_id=?,research_notes=?,grounding_json=?,qc_warnings=?,
+                status='pending_review',approval_json=NULL,revision=revision+1,updated_at=? WHERE id=?""",
+                (generated['subject'],generated['body'],generated['hook'],generated['resume_variant_id'],generated['research_notes'],generated['grounding_json'],generated['qc_warnings'],timestamp(),eid))
+            event(conn,eid,'draft_regenerated',{'revision':row['revision']+1})
     @staticmethod
     def update_content(eid, subject=None, body=None, hook=None, expected_revision=None, resume_variant_id=None, change_resume=False):
         import qc

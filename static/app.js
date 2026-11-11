@@ -109,10 +109,21 @@ async function contactsView(){
     file.addEventListener("change",async()=>{if(!file.files.length)return;const form=new FormData();form.append("file",file.files[0]);try{const r=await api("/api/contacts/import","POST",form);toast(r.contacts_created+" contacts added; "+r.duplicates_skipped+" duplicates skipped.");if(r.errors.length)toast(r.errors.map(e=>"Row "+e.row+": "+e.error).join("; "),true);await render();}catch(e){toast(e.message,true);}finally{file.value="";}});
     const root=el("div",{},title("Contacts",button("Add contact",()=>contactForm(companies)),button("Search",async()=>{contactSearch=search.value;contactsOffset=0;await render();})),field("Search name, company or email",search),field("Import CSV",file));
     root.append(field("Resume for new drafts",draftResume));
-    root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"—",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>draftFor(p)),button("Edit",()=>contactForm(companies,p)),button("Do not contact",()=>suppressAddress(p.email)),button("Check DNS",async()=>{const result=await api("/api/contacts/"+p.id+"/validate","POST",{});toast((result.warning||"Domain accepts mail in DNS")+". "+result.note,!!result.warning);})))))));
+    root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"—",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>draftFor(p)),button("Write manually",()=>manualDraftForm(p,setup)),button("Edit",()=>contactForm(companies,p)),button("Do not contact",()=>suppressAddress(p.email)),button("Check DNS",async()=>{const result=await api("/api/contacts/"+p.id+"/validate","POST",{});toast((result.warning||"Domain accepts mail in DNS")+". "+result.note,!!result.warning);})))))));
     if(!people.length)root.append(el("p",{},"No contacts found. Add a company first, or import the sample CSV."));
     root.append(el("div",{class:"actions"},button("Previous",async()=>{contactsOffset=Math.max(0,contactsOffset-100);await render();}),button("Next",async()=>{if(people.length===100){contactsOffset+=100;await render();}})));
     return root;
+}
+function manualDraftForm(person,setup){
+    const subject=input(),body=el('textarea',{rows:8}),variant=select([['none','No resume'],...setup.resumes.map(r=>[r.id,r.name])],'none');
+    const form=el('div',{},field('Subject',subject),field('Pitch (greeting and signature are added)',body),field('Resume',variant));
+    const dialog=modal('Write manually',form);
+    form.append(button('Create draft',async()=>{await api('/api/drafts/manual','POST',{company_id:person.company_id,contact_id:person.id,subject:subject.value,body:body.value,resume_variant_id:variant.value==='none'?null:Number(variant.value)});dialog.close();await navigate('Review');},'primary'));
+}
+function followupForm(original,setup){
+    const variant=select([['original','Use original resume'],['none','No resume'],...setup.resumes.map(r=>[r.id,r.name])],'original');
+    const form=el('div',{},field('Follow-up resume',variant));const dialog=modal('Draft follow-up',form);
+    form.append(button('Generate follow-up',async()=>{const data={};if(variant.value!=='original')data.resume_variant_id=variant.value==='none'?null:Number(variant.value);await queued('/api/tracking/'+original.id+'/followup',data);dialog.close();}));
 }
 function contactForm(companies,person=null){
     if(!companies.length){toast("Add a company first in Companies.",true);return;}
@@ -179,7 +190,7 @@ async function reviewView(){
             toast(dirty.has(draft.id)?"Earlier edits saved. Save the newer edits before approving.":"Saved. Approval is still required.");
         }),"",()=>writing);
         reject=button("Reject",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"reject",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Draft rejected.");},true),"danger",()=>writing);
-        section.append(el("div",{class:"actions"},save,approve,reject));
+        section.append(el("div",{class:"actions"},save,approve,reject,button("Regenerate",async()=>{if(dirty.has(draft.id)){toast("Save your edits before regenerating.",true);return;}if(!confirm("Replace this draft with AI output? Manual edits will be replaced only if generation succeeds; review and approval will be required again."))return;await queued("/api/review/"+draft.id+"/regenerate",{revision:draft.revision,resume_variant_id:Number(variant.value)||null});})));
         root.append(section);
     }
     paginate(root,"Review",drafts);return root;
@@ -202,7 +213,7 @@ async function trackingView(){
     const scan=setup.reply_scan.length?JSON.parse(setup.reply_scan[0].value):null;
     root.append(card('Reply scan coverage',el('p',{},scan?'Mailbox: '+scan.mailbox+' · Last check: '+(scan.checked_at||'Incomplete')+' · Remaining: '+(scan.remaining??'unknown')+' · Unreviewed reports: '+(scan.unreviewed_reports??0):'No reply scan yet.'),el('p',{},'Follow-ups require a current complete scan. Replies can still arrive after checking. Only the configured mailbox is scanned.'),button('Continue scan',()=>queued('/api/check_replies'))));
     for(const report of setup.skipped_reply_reports){const details=JSON.parse(report.value);root.append(card('Skipped delivery report',el('p',{},'Inspect message UID '+details.uid+' in '+details.mailbox+' and record its outcome before acknowledging it.'),button('I reviewed this report',async()=>{await api('/api/reply-reports/review','POST',{key:report.key});await render();})));}
-    root.append(card("Due for follow-up",table(["Company","Recipient","Actions"],due.map(r=>el("tr",{},cell(r.company_name,true),cell(r.contact_email),cell(button("Draft follow-up",()=>queued("/api/tracking/"+r.id+"/followup"))))))));
+    root.append(card("Due for follow-up",table(["Company","Recipient","Actions"],due.map(r=>el("tr",{},cell(r.company_name,true),cell(r.contact_email),cell(button("Draft follow-up",()=>followupForm(r,setup))))))));
     const statuses=["replied","ghosted","bounced","interview_scheduled","interview_completed","offer","no_offer"];
     root.append(table(["Company","Recipient","Status","Sent","Update"],tracked.map(r=>{
         const choice=select(statuses.map(s=>[s,s.replaceAll("_"," ")]),r.status);
