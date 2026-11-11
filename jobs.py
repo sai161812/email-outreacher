@@ -71,9 +71,13 @@ def stop(jid):
 
 def send_plan():
     import config
+    import sender
     with get_connection() as conn:
         members=[dict(r) for r in conn.execute(JOINED+"WHERE e.status='approved' ORDER BY e.created_at,e.id")]
-    return {'sender':config.GMAIL_ADDRESS.strip().lower(),'members':members}
+    account=config.GMAIL_ADDRESS.strip().lower()
+    preflight=sender.run_send_batch(dry_run=True,members=[{'id':r['id'],'revision':r['revision']} for r in members],batch_sender=account)
+    return {'sender':account,'members':members,'preflight':preflight,
+        'projected_eligible':sum(r['status']=='dry_run' for r in preflight)}
 
 def _dispatch(kind,payload,progress):
     if kind=="send":
@@ -83,7 +87,7 @@ def _dispatch(kind,payload,progress):
         return {"summary":result,"counts":{name:sum(r["status"]==name for r in result) for name in ("sent","failed","uncertain","skipped","deferred","dry_run","canceled")}}
     if kind=="replies":
         import replies
-        return {"matches":replies.check_replies()}
+        return replies.check_replies(detailed=True)
     import composer
     if kind=="compose":
         return {"id":composer.compose_and_store(**payload)}

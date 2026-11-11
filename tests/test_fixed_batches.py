@@ -28,6 +28,20 @@ def test_changed_revision_is_skipped_even_if_reapproved(draft,mail):
     assert jobs.get(job['id'])['result']['counts']['skipped']==1
     mail.sendmail.assert_not_called()
 
+def test_confirmation_plan_covers_all_pages_and_explains_capacity(contact,draft,mail,monkeypatch):
+    reviewer.approve(draft)
+    company,_=contact
+    for i in range(100):
+        cid=ContactRepository.create(company,f'page{i}@example.test')
+        eid=EmailRepository.create(company,cid,None,'H','S','Body',None)
+        reviewer.approve(eid)
+    monkeypatch.setattr(config,'DAILY_SEND_CAP',1)
+    plan=jobs.send_plan()
+    assert len(plan['members'])==101 and len(plan['preflight'])==101
+    assert plan['projected_eligible']==1
+    assert any(r.get('reason')=='Daily send limit reached' for r in plan['preflight'])
+    mail.sendmail.assert_not_called()
+
 def test_pending_cancel_makes_no_claim(draft,mail):
     reviewer.approve(draft)
     job=jobs.enqueue('send',{})

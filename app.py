@@ -138,7 +138,18 @@ def create_app(overrides=None):
                            "daily_remaining":max(0,config.DAILY_SEND_CAP-EmailRepository.count_sends_today()-rows("SELECT COUNT(*) n FROM send_attempts a JOIN emails e ON e.id=a.email_id WHERE a.state IN ('reserved','submitting','uncertain') AND e.sent_at IS NULL")[0]["n"])},
             migration_reports=rows("SELECT * FROM migration_reports WHERE count>0"),
             duplicate_contacts=ContactRepository.duplicate_groups(),
+            reply_scan=rows("SELECT value FROM settings WHERE key='reply_scan'"),
+            suppression_history=rows('SELECT email,action,reason,created_at FROM suppression_events ORDER BY id DESC LIMIT 100'),
+            skipped_reply_reports=rows("SELECT key,value FROM settings WHERE key LIKE 'reply_report:%'"),
             worker=rows("SELECT value FROM settings WHERE key='worker_heartbeat'"))
+    @app.post('/api/reply-reports/review')
+    def review_report():
+        data=payload({'key'},{'key'})
+        if not isinstance(data['key'],str) or not data['key'].startswith('reply_report:'): raise ValueError('Invalid report')
+        with db.get_connection(immediate=True) as conn:
+            if not conn.execute('DELETE FROM settings WHERE key=?',(data['key'],)).rowcount: raise NotFound('Report not found')
+            event(conn,None,'reply_report_reviewed',{'key':data['key']})
+        return jsonify(success=True)
     @app.post("/api/settings")
     def save_settings():
         data=payload({"profile","candidate_context"})
@@ -314,8 +325,8 @@ def create_app(overrides=None):
     def reconcile(aid):
         data=payload({"accepted"},{"accepted"})
         if type(data["accepted"]) is not bool: raise ValueError("accepted must be boolean")
-        delivery.reconcile(aid,data["accepted"])
-        return jsonify(success=True)
+        result=delivery.reconcile(aid,data["accepted"])
+        return jsonify(success=True,**result)
     @app.post("/api/emails/<int:eid>/retry")
     def retry(eid):
         payload(set())

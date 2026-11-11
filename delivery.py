@@ -1,5 +1,6 @@
 """Atomic claims and conservative delivery recovery; no network inside transactions."""
 import json
+import logging
 from datetime import timedelta, timezone
 from email.utils import make_msgid
 import config
@@ -132,4 +133,11 @@ def reconcile(attempt_id, accepted):
         raise ValueError("accepted must be boolean")
     finish(attempt_id,"accepted" if accepted else "failed","operator_reconciliation",expected_state="uncertain")
     from replies import replay_evidence
-    replay_evidence()
+    try:
+        replay_evidence()
+        return {'reply_replay_pending':False}
+    except Exception:
+        # Acceptance is already committed. Report that truth and retry evidence
+        # during the next scan rather than reporting reconciliation as failed.
+        logging.error('reply_replay_pending attempt_id=%s',attempt_id)
+        return {'reply_replay_pending':True}

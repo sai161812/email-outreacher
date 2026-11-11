@@ -145,6 +145,19 @@ class ResumeRepository:
             return conn.execute("INSERT INTO resume_variants(name,keywords,file_path,resume_url) VALUES (?,?,?,?)",
                                 (name, keywords,file_path,resume_url)).lastrowid
 
+def suppress_in_transaction(conn,email,reason):
+    email=email.strip().lower()
+    if conn.execute('SELECT 1 FROM suppressions WHERE lower(trim(email))=?',(email,)).fetchone():
+        conn.execute('UPDATE suppressions SET reason=? WHERE lower(trim(email))=?',(reason,email))
+    else:
+        conn.execute('INSERT INTO suppressions(email,reason) VALUES (?,?)',(email,reason))
+    conn.execute('INSERT INTO suppression_events(email,action,reason,created_at) VALUES (?,?,?,?)',(email,'added',reason,timestamp()))
+    affected=conn.execute("SELECT id FROM emails WHERE status IN ('pending_review','approved') AND contact_id IN (SELECT id FROM contacts WHERE lower(trim(email))=?)",(email,)).fetchall()
+    for row in affected:
+        conn.execute("UPDATE emails SET status='canceled',approval_json=NULL,revision=revision+1,updated_at=? WHERE id=?",(timestamp(),row['id']))
+        event(conn,row['id'],'canceled',{'reason':'recipient_suppressed'})
+
+
 class SuppressionRepository:
     @staticmethod
     def get_all():
@@ -155,14 +168,11 @@ class SuppressionRepository:
     @staticmethod
     def add(email, reason):
         with get_connection(immediate=True) as conn:
-            conn.execute("DELETE FROM suppressions WHERE lower(trim(email))=lower(trim(?))", (email,))
-            conn.execute("INSERT INTO suppressions(email,reason) VALUES (?,?)", (email.strip().lower(),reason))
-            conn.execute("""UPDATE emails SET status='canceled',approval_json=NULL,updated_at=?
-                WHERE status IN ('pending_review','approved') AND contact_id IN
-                (SELECT id FROM contacts WHERE lower(trim(email))=?)""", (timestamp(),email.strip().lower()))
+            suppress_in_transaction(conn,email,reason)
     @staticmethod
     def remove(email):
         with get_connection() as conn:
+            conn.execute('INSERT INTO suppression_events(email,action,reason,created_at) SELECT lower(trim(email)),?,reason,? FROM suppressions WHERE lower(trim(email))=lower(trim(?))',('removed',timestamp(),email))
             conn.execute("DELETE FROM suppressions WHERE lower(trim(email))=lower(trim(?))", (email,))
 
 JOINED = """SELECT e.*,c.name company_name,ct.email contact_email,ct.name contact_name
@@ -236,7 +246,7 @@ class EmailRepository:
                          (json.dumps(approved,sort_keys=True),timestamp(),eid))
             event(conn,eid,"approved",{"revision":row["revision"]})
     @staticmethod
-    def update_status(eid, status, set_updated_at=True, set_sent_at=False, sent_at_time=None):
+    def update_status(eid, status, set_updated_at=True, set_sent_at=False, sent_at_time=None,suppress_bounce=True):
         if status == "approved":
             return EmailRepository.approve(eid)
         with get_connection(immediate=True) as conn:
@@ -249,9 +259,9 @@ class EmailRepository:
                 raise Conflict("Only actually sent emails can have outcomes")
             conn.execute("UPDATE emails SET status=?,updated_at=? WHERE id=?", (status,timestamp(),eid))
             event(conn,eid,status)
-            if status == "bounced":
+            if status == "bounced" and suppress_bounce:
                 ct = conn.execute("SELECT email FROM contacts WHERE id=?", (row["contact_id"],)).fetchone()
-                conn.execute("INSERT OR REPLACE INTO suppressions(email,reason) VALUES (?,?)", (ct["email"].strip().lower(),"hard bounce"))
+                suppress_in_transaction(conn,ct['email'],'invalid mailbox')
             if status in {"replied","bounced","interview_scheduled","interview_completed","offer","no_offer"}:
                 root = row["thread_root_id"] or row["id"]
                 conn.execute("""UPDATE emails SET status='canceled',approval_json=NULL,updated_at=?

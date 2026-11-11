@@ -23,7 +23,7 @@ def mark_replied(eid):
                 pass  # A concurrent interview/offer must not be downgraded.
 
 def mark_ghosted(eid): return _set_status(eid,"ghosted")
-def mark_bounced(eid): return _set_status(eid,"bounced")
+def mark_bounced(eid,suppress=True): return EmailRepository.update_status(eid,"bounced",suppress_bounce=suppress)
 def mark_interview_scheduled(eid): return _set_status(eid,"interview_scheduled")
 def mark_interview_completed(eid): return _set_status(eid,"interview_completed")
 def mark_offer(eid): return _set_status(eid,"offer")

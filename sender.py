@@ -9,6 +9,7 @@ from email.utils import format_datetime, make_msgid
 from pathlib import Path
 import config
 import delivery
+from smtp_policy import rejection
 from errors import Conflict
 from repository import EmailRepository, SuppressionRepository, event
 from db import get_connection
@@ -97,7 +98,7 @@ def run_send_batch(dry_run=False, force=False, progress=None,members=None,batch_
                     with get_connection() as conn:
                         item['contact_email']=conn.execute('SELECT email FROM contacts WHERE id=?',(latest['contact_id'],)).fetchone()[0]
                 if transport_failed:
-                    summary.append({"id":eid,"status":"deferred","reason":"Transport setup failed earlier in this batch"})
+                    summary.append({"id":eid,"status":"deferred","reason":"Batch paused after a transport, throttling or policy failure; review its results before retrying"})
                     continue
                 if not is_in_send_window():
                     summary.append({"id":eid,"status":"deferred","reason":"Outside send window"})
@@ -131,6 +132,15 @@ def run_send_batch(dry_run=False, force=False, progress=None,members=None,batch_
                 if not is_in_send_window():
                     summary.append({"id":eid,"status":"deferred","reason":"Outside send window"})
                     continue
+                if item.get('follow_up_to_email_id'):
+                    import replies
+                    try:
+                        scan=replies.check_replies(detailed=True)
+                        if not scan['complete']:
+                            raise Conflict('Reply scan incomplete; continue scanning or inspect skipped reports before following up')
+                    except (ValueError,Conflict) as exc:
+                        summary.append({'id':eid,'status':'deferred','reason':str(exc)})
+                        continue
                 claim=delivery.claim(eid,item.get('expected_revision'))
                 if not claim:
                     summary.append({"id":eid,"status":"skipped","reason":"Already claimed or changed"})
@@ -153,14 +163,19 @@ def run_send_batch(dry_run=False, force=False, progress=None,members=None,batch_
                         company_name=approved["company_name"],in_reply_to=parent["message_id"] if parent else None,
                         attach_mode=approved["attach_mode"],message_id=claim["message_id"],asset=approved["resume"])
                 except smtplib.SMTPRecipientsRefused as exc:
-                    delivery.finish(claim["attempt_id"],"failed","recipient_refused")
-                    if all(code>=500 for code,_ in exc.recipients.values()):
-                        SuppressionRepository.add(approved["recipient"],"hard bounce")
-                    summary.append({"id":eid,"status":"failed","reason":"Recipient refused"})
+                    code,text=exc.recipients.get(approved['recipient'],next(iter(exc.recipients.values())))
+                    detail=rejection(code,text)
+                    transport_failed=detail['pause']
+                    delivery.finish(claim["attempt_id"],"failed",detail['error_code'])
+                    if detail['suppress']: SuppressionRepository.add(approved["recipient"],"invalid mailbox")
+                    summary.append({"id":eid,"status":"failed","reason":detail['category'],**{k:detail[k] for k in ('smtp_code','enhanced_status')}})
                     continue
-                except (smtplib.SMTPSenderRefused,smtplib.SMTPDataError) as exc:
-                    delivery.finish(claim["attempt_id"],"failed",type(exc).__name__)
-                    summary.append({"id":eid,"status":"failed","reason":"SMTP rejected the message"})
+                except smtplib.SMTPResponseException as exc:
+                    stage='authentication' if isinstance(exc,smtplib.SMTPAuthenticationError) else ('sender' if isinstance(exc,smtplib.SMTPSenderRefused) else 'data')
+                    detail=rejection(exc.smtp_code,exc.smtp_error,stage)
+                    transport_failed=True
+                    delivery.finish(claim["attempt_id"],"failed",detail['error_code'])
+                    summary.append({"id":eid,"status":"failed","reason":detail['category'],**{k:detail[k] for k in ('smtp_code','enhanced_status')}})
                     continue
                 except Exception:
                     _record_uncertain(claim["attempt_id"],"submission_interrupted")
@@ -187,15 +202,17 @@ def run_send_batch(dry_run=False, force=False, progress=None,members=None,batch_
                 if claim:
                     delivery.finish(claim["attempt_id"],"canceled","preflight_failed")
                 summary.append({"id":eid,"status":"deferred","reason":str(exc)})
-            except Exception:
+            except Exception as exc:
                 if submission_started:
                     _record_uncertain(claim["attempt_id"],"submission_result_unrecorded")
                     summary.append({"id":eid,"status":"uncertain","reason":"Submission result requires reconciliation"})
                     _close_transport(server);server=None
                     continue
                 if claim:
-                    delivery.finish(claim["attempt_id"],"failed","transport_setup_failed")
-                summary.append({"id":eid,"status":"failed","reason":"Mail transport unavailable; check settings"})
+                    detail=rejection(exc.smtp_code,exc.smtp_error,'authentication' if isinstance(exc,smtplib.SMTPAuthenticationError) else 'setup') if isinstance(exc,smtplib.SMTPResponseException) else None
+                    delivery.finish(claim["attempt_id"],"failed",detail['error_code'] if detail else "transport_setup_failed")
+                else: detail=None
+                summary.append({"id":eid,"status":"failed","reason":detail['category'] if detail else "Mail transport unavailable; check settings",**({k:detail[k] for k in ('smtp_code','enhanced_status')} if detail else {})})
                 transport_failed=True
             finally:
                 if progress:

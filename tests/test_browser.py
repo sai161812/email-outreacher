@@ -21,6 +21,8 @@ def browser_app(temp_db,monkeypatch):
     monkeypatch.setattr(config,"GMAIL_APP_PASSWORD","synthetic-password")
     monkeypatch.setattr(sender,"is_in_send_window",lambda *a:True)
     monkeypatch.setattr(sender.time,"sleep",lambda *a:None)
+    import replies
+    monkeypatch.setattr(replies,'check_replies',lambda **kwargs:{'matches':[],'complete':True,'mailbox':'INBOX','scanned':0,'remaining':0,'skipped':0})
     smtp=Mock()
     monkeypatch.setattr(sender.smtplib,"SMTP",Mock(return_value=smtp))
     monkeypatch.setattr(composer,"compose_email",lambda *a:{

@@ -54,7 +54,7 @@ The factory also initializes/migrates the database when imported by Flask or Wai
 2. In **Companies**, add the company and optional job text/URL. In **Contacts**, select the company and enter a contact, or import companies_template.csv.
 3. Click **Draft**, then inspect its result in **Jobs** and open **Review**. Keyword matching selects the resume with the most whole-keyword matches; ties/no matches use the earliest registered variant. Review provides a manual override.
 4. Verify company claims, sources, recipient, text and resume. AI-written notes and URLs are not independent verification. Save edits first, then approve the saved revision. Saving never approves.
-5. Inspect **Queue**. Preview checks current eligibility and projects quotas without SMTP calls or database claims. **Send approved batch** queues a real send operation; it respects the configured window and limits. Preview/live jobs with different inputs cannot replace one another.
+5. Inspect **Queue**. **Send approved batch** opens confirmation for the complete queue across all pages, with sender, recipients, revisions, projected eligibility and exclusion reasons. **Send this batch** freezes that membership; later approvals cannot join it. Preview checks eligibility and quotas without SMTP calls or claims. Sending rechecks all safeguards. Use Jobs to cancel a pending batch or stop the remaining messages in a running one. An in-flight submission cannot be recalled.
 6. Inspect each job's actual results. **Tracking** supports reply scans, outcomes, due follow-ups, safe review of failed/canceled work, and reconciliation of uncertain attempts.
 
 Imports use UTF-8 CSV, optionally with a BOM. Required headers: company_name, contact_email. Optional headers: domain, job_url, job_text, notes, contact_name, contact_title, contact_source. Valid rows persist independently; duplicates are skipped, row errors are reported, and a malformed tail stops further parsing while reporting already imported counts. Defaults: 1 MiB and 10,000 rows. The sample uses reserved example domains; replace the synthetic data before outreach.
@@ -88,6 +88,24 @@ Confirmation is atomic: competing decisions cannot both succeed. For an uncertai
 Accepted sends continue counting after replies/bounces/outcomes. Outstanding and uncertain reservations conservatively consume quota even across dates until resolved. Suppressions block future preflight checks and cancel unsubmitted drafts; they cannot recall mail already submitted. Deferred approved messages need another explicitly queued batch. Batches are not rescheduled automatically.
 
 Reply scans are read-only, fetch up to 500 new UIDs per operation, retain UIDVALIDITY-scoped progress, and require exact Message-ID/thread, sender and date evidence. Address-only historical messages and auto-replies are not counted as human replies. Messages without usable threading evidence require manual tracking; only confidently matched delivery reports can become bounces. Follow-ups require an actually sent, unanswered, due thread and share eligibility checks at drafting, approval and delivery. The default is one follow-up after seven days.
+
+Tracking shows scan coverage and remaining backlog. Use **Continue scan** to catch
+up; oversized reports must be inspected and acknowledged there before follow-ups.
+Each live follow-up requires a fresh complete reply scan; an unavailable or
+incomplete mailbox defers it. `IMAP_MAILBOX` defaults to `INBOX`; choose another
+mailbox explicitly if filters/archive rules move replies. UID progress is scoped
+to account, mailbox and UIDVALIDITY. Replies can arrive after a completed check.
+Exact-thread evidence seen while delivery is uncertain is retained and reconsidered
+after reconciliation. No message body is saved for that pending evidence.
+
+Approval and attempt records include the sending account. Changing the account
+requires new review; an account-bound database rejects a different mailbox.
+Configure the original account before first use of legacy unbound history.
+Old approvals without sender identity need review again after upgrading. Old
+queued batches without fixed membership must be queued again. SMTP policy/rate
+failures pause remaining submissions. Only explicit invalid-mailbox evidence
+automatically suppresses an address; other permanent rejections require review.
+Suppression additions/removals retain their reasons and original creation time.
 
 Delivery reports require a permanent failure for the matching recipient and the exact original Message-ID, including IDs returned in message/rfc822 or text/rfc822-headers parts ([RFC 3464](https://www.rfc-editor.org/rfc/rfc3464), [RFC 6522](https://www.rfc-editor.org/rfc/rfc6522)). Reports do not downgrade an already recorded reply/interview. Oversized reports are listed as skipped in job results for manual inspection; later inbox messages continue scanning.
 

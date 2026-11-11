@@ -33,3 +33,12 @@ def test_scan_before_reconciliation_retains_thread_evidence(draft,mail,monkeypat
     assert EmailRepository.get_by_id(draft)['status']==expected
     with get_connection() as conn:
         assert conn.execute('SELECT processed FROM reply_evidence').fetchone()[0]==1
+
+
+def test_replay_failure_does_not_hide_committed_reconciliation(draft,mail,monkeypatch):
+    reviewer.approve(draft)
+    attempt=delivery.claim(draft);delivery.prepare(attempt['attempt_id'])
+    delivery.finish(attempt['attempt_id'],'uncertain')
+    monkeypatch.setattr(replies,'replay_evidence',Mock(side_effect=RuntimeError('storage unavailable')))
+    assert delivery.reconcile(attempt['attempt_id'],True)['reply_replay_pending']
+    assert EmailRepository.get_by_id(draft)['status']=='sent'
