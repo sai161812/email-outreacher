@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import random
 import smtplib
 import ssl
@@ -75,6 +76,7 @@ def run_send_batch(dry_run=False, force=False, progress=None):
         for item in queue:
             eid=item["id"]
             claim=None
+            submission_started=False
             try:
                 if transport_failed:
                     summary.append({"id":eid,"status":"deferred","reason":"Transport setup failed earlier in this batch"})
@@ -113,6 +115,7 @@ def run_send_batch(dry_run=False, force=False, progress=None):
                     server.starttls(context=ssl.create_default_context())
                     server.login(config.GMAIL_ADDRESS,config.GMAIL_APP_PASSWORD)
                 approved=delivery.prepare(claim["attempt_id"])
+                submission_started=True
                 parent=EmailRepository.get_by_id(item["follow_up_to_email_id"]) if item["follow_up_to_email_id"] else None
                 try:
                     needs_delay=True
@@ -130,7 +133,7 @@ def run_send_batch(dry_run=False, force=False, progress=None):
                     summary.append({"id":eid,"status":"failed","reason":"SMTP rejected the message"})
                     continue
                 except Exception:
-                    delivery.finish(claim["attempt_id"],"uncertain","submission_interrupted")
+                    _record_uncertain(claim["attempt_id"],"submission_interrupted")
                     summary.append({"id":eid,"status":"uncertain","reason":"Delivery requires reconciliation; automatic retry disabled"})
                     _close_transport(server)
                     server=None
@@ -146,10 +149,20 @@ def run_send_batch(dry_run=False, force=False, progress=None):
                         pass  # Durable 'submitting' attempt is recovered as uncertain.
                     summary.append({"id":eid,"status":"uncertain","reason":"SMTP accepted; database confirmation failed"})
             except (ValueError,Conflict) as exc:
+                if submission_started:
+                    _record_uncertain(claim["attempt_id"],"submission_result_unrecorded")
+                    summary.append({"id":eid,"status":"uncertain","reason":"Submission result requires reconciliation"})
+                    _close_transport(server);server=None
+                    continue
                 if claim:
                     delivery.finish(claim["attempt_id"],"canceled","preflight_failed")
                 summary.append({"id":eid,"status":"deferred","reason":str(exc)})
             except Exception:
+                if submission_started:
+                    _record_uncertain(claim["attempt_id"],"submission_result_unrecorded")
+                    summary.append({"id":eid,"status":"uncertain","reason":"Submission result requires reconciliation"})
+                    _close_transport(server);server=None
+                    continue
                 if claim:
                     delivery.finish(claim["attempt_id"],"failed","transport_setup_failed")
                 summary.append({"id":eid,"status":"failed","reason":"Mail transport unavailable; check settings"})
@@ -160,6 +173,14 @@ def run_send_batch(dry_run=False, force=False, progress=None):
     finally:
         _close_transport(server)
     return summary
+
+
+def _record_uncertain(attempt_id,code):
+    try:
+        delivery.finish(attempt_id,"uncertain",code)
+    except Exception:
+        # The durable submitting attempt is recovered as uncertain after restart.
+        logging.error("send_result_unrecorded attempt_id=%s phase=submission",attempt_id)
 
 def _close_transport(server):
     if server is None: return
