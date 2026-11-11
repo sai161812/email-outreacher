@@ -149,7 +149,7 @@ function companyForm(company=null){
 }
 async function targetsView(){
     const [companies,targets,projects]=await Promise.all([api('/api/companies?limit=500'),api('/api/opportunities'),api('/api/projects')]);
-    const root=el('div',{},title('Targets and project evidence',button('Add role brief',()=>targetForm(companies,projects)),button('Edit project evidence',()=>projectsForm(projects))),el('p',{},'Record only facts you can support. Application status, relationships and results are owner supplied. Source links and AI notes require independent review.'),table(['Company','Role','Level','Application','Actions'],targets.map(t=>el('tr',{},cell(companies.find(c=>c.id===t.company_id)?.name||t.company_id),cell(t.role),cell(t.level||'Unknown'),cell(t.application_status||'Unknown'),cell(button('Edit role brief',()=>targetForm(companies,projects,t)))))));
+    const root=el('div',{},title('Targets and project evidence',button('Add role brief',async()=>targetForm(companies,await api('/api/projects'))),button('Edit project evidence',()=>projectsForm(projects))),el('p',{},'Record only facts you can support. Application status, relationships and results are owner supplied. Source links and AI notes require independent review.'),table(['Company','Role','Level','Application','Actions'],targets.map(t=>el('tr',{},cell(companies.find(c=>c.id===t.company_id)?.name||t.company_id),cell(t.role),cell(t.level||'Unknown'),cell(t.application_status||'Unknown'),cell(button('Edit role brief',()=>targetForm(companies,projects,t)))))));
     root.append(card('Your projects',projects.map(p=>el('p',{},p.name+': '+p.action+' / '+(p.result||'No measured result')))));
     return root;
 }
@@ -169,7 +169,7 @@ function projectsForm(projects){
     const entries=[0,1,2].map(i=>{const p=projects[i]||{};return {id:p.id,name:input(p.name),action:el('textarea',{value:p.action||''}),result:input(p.result),proof_url:input(p.proof_url,'url')};});
     const form=el('div',{},entries.map((e,i)=>card('Project '+(i+1),field('Project name '+(i+1),e.name),field('What you built or did '+(i+1),e.action),field('Actual result (optional) '+(i+1),e.result),field('Proof URL (optional) '+(i+1),e.proof_url))));
     const dialog=modal('Edit project evidence',form);
-    form.append(button('Save projects',async()=>{const items=entries.filter(e=>e.name.value.trim()||e.action.value.trim()).map(e=>({...(e.id?{id:e.id}:{}),name:e.name.value,action:e.action.value,result:e.result.value,proof_url:e.proof_url.value}));await api('/api/projects','POST',{projects:items});dialog.close();await render();},'primary'));
+    form.append(button('Save projects',async()=>{const items=entries.filter(e=>e.name.value.trim()||e.action.value.trim()).map(e=>({...(e.id?{id:e.id}:{}),name:e.name.value,action:e.action.value,result:e.result.value,proof_url:e.proof_url.value}));await api('/api/projects','POST',{projects:items});await render();dialog.close();},'primary'));
 }
 async function reviewView(){
     const [drafts,setup]=await Promise.all([api("/api/review?limit=100&offset="+offsets.Review),api("/api/settings")]);
