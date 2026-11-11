@@ -1,3 +1,4 @@
+from conftest import pdf_bytes
 import json
 import smtplib
 from datetime import timedelta
@@ -172,7 +173,7 @@ def test_conflicting_reconciliation_is_atomic(draft,mail):
 def test_message_headers_and_attachment(contact,mail,tmp_path,monkeypatch):
     import resume
     pdf=config.RESUME_DIR/"cv.pdf"
-    pdf.write_bytes(b"%PDF-1.4\nsynthetic test")
+    pdf.write_bytes(pdf_bytes("synthetic test"))
     rid=resume.add_resume_variant("CV","python",str(pdf))
     company,person=contact
     eid=EmailRepository.create(company,person,rid,"Hook","Subject","Body",None)
@@ -186,11 +187,11 @@ def test_message_headers_and_attachment(contact,mail,tmp_path,monkeypatch):
 def test_changed_attachment_blocks_submission(contact,mail):
     import resume
     pdf=config.RESUME_DIR/"cv.pdf"
-    pdf.write_bytes(b"%PDF-1.4\noriginal")
+    pdf.write_bytes(pdf_bytes("original"))
     rid=resume.add_resume_variant("CV","python",str(pdf))
     company,person=contact
     eid=EmailRepository.create(company,person,rid,"Hook","Subject","Body",None)
     reviewer.approve(eid)
-    pdf.write_bytes(b"%PDF-1.4\nchanged")
+    pdf.write_bytes(pdf_bytes("changed"))
     assert sender.run_send_batch()[0]["status"]=="deferred"
     assert mail.sendmail.call_count==0

@@ -6,6 +6,13 @@ See [product acceptance and startup](docs/PRODUCT_READINESS.md) for the tested w
 
 ## Install and start
 
+Install Python **3.12** first and verify `py -3.12 --version` (Windows) or
+`python3.12 --version` (Linux/macOS). An environment copied from another machine
+may reference a missing interpreter. Preserve that environment under a new name,
+then recreate `.venv` using the commands below. On this workspace, Python 3.12.16
+is installed privately under `.python`; the repaired `.venv` uses that runtime.
+Keep `.python` while using this environment; neither directory belongs in a release.
+
 Windows PowerShell, from the repository:
 
 ~~~powershell
@@ -87,6 +94,32 @@ Delivery reports require a permanent failure for the matching recipient and the 
 Funnel rates count **sent messages, including follow-ups**, not unique people. Sent totals remain stable through outcomes. Research claims still need human verification. Caps and delays do not guarantee inbox placement or compliance with provider account limits.
 
 ## Backup, check and restore
+
+Run `python manage.py diagnose` from the installed environment for runtime,
+resolved paths, schema version, configuration presence and worker last-seen status.
+This performs no network checks and does not initialize/migrate the database.
+“Configured” in Settings means a value is present; provider access remains unverified.
+
+To import legacy facts, open Settings and click **Preview legacy context.txt**.
+Review the visible text, then **Save profile and facts**. Preview alone never saves.
+Resolve duplicate contact groups after inspecting correspondence, keeping the intended
+record and archiving redundant contacts. Upload your actual resume: PDFs must parse,
+be unencrypted, contain 1–100 pages and fit the configured size limit.
+
+For a portable data backup including all registered local PDF files:
+
+~~~powershell
+.\.venv\Scripts\python.exe manage.py backup --bundle backups\personal-snapshot
+.\.venv\Scripts\python.exe manage.py restore --bundle backups\personal-snapshot --output restored\outreach.sqlite --resume-output restored\resumes
+~~~
+
+Both restore destinations must be new. Stop server and worker before restoring.
+The manifest checks database/PDF hashes; restored file references use the new paths,
+and unsent approvals return to review. Set `OUTREACH_DB_PATH` and `RESUME_DIR` to
+the restored paths, run `manage.py init` and `manage.py check`, and verify selected
+PDFs before starting either process. Bundles preserve existing assets, including
+legacy malformed files, for recovery; they do not certify resume quality. Copy
+credentials separately into protected storage. Never commit bundles or credentials.
 
 ~~~powershell
 .\.venv\Scripts\python.exe manage.py check

@@ -1,6 +1,7 @@
 """Local database operations; never sends mail or calls AI."""
 import argparse
 import json
+import sqlite3
 import config
 import db
 
@@ -22,8 +23,14 @@ def main():
     commands=parser.add_subparsers(dest="command",required=True)
     commands.add_parser("init",help="Initialize or upgrade, backing up an existing database first")
     commands.add_parser("check",help="Check integrity and report legacy issues without exposing records")
+    commands.add_parser("diagnose",help="Report runtime, paths and configuration presence without network calls")
     backup=commands.add_parser("backup",help="Create an SQLite-consistent backup, including committed WAL data")
     backup.add_argument("--output",help="New backup filename; an existing file is never overwritten")
+    backup.add_argument("--bundle",help="New directory containing database, resume assets and manifest")
+    restore=commands.add_parser("restore",help="Restore a bundle into NEW database and resume paths")
+    restore.add_argument("--bundle",required=True)
+    restore.add_argument("--output",required=True)
+    restore.add_argument("--resume-output",required=True)
     args=parser.parse_args()
     try:
         if args.command=="init":
@@ -31,9 +38,19 @@ def main():
             print(json.dumps(check_database()))
         elif args.command=="check":
             print(json.dumps(check_database()))
+        elif args.command=="diagnose":
+            from operations import diagnostics
+            print(json.dumps(diagnostics(),indent=2))
+        elif args.command=="restore":
+            from operations import restore_bundle
+            print(restore_bundle(args.bundle,args.output,args.resume_output))
+        elif args.bundle:
+            if args.output: raise ValueError("Choose --output or --bundle")
+            from operations import backup_bundle
+            print(backup_bundle(args.bundle))
         else:
             print(db.backup_database(args.output))
-    except (ValueError,RuntimeError) as exc:
+    except (ValueError,RuntimeError,OSError,sqlite3.Error) as exc:
         parser.exit(1,str(exc)+"\n")
 
 if __name__=="__main__":

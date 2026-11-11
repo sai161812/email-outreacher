@@ -1,3 +1,4 @@
+from conftest import pdf_bytes
 import threading
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -253,7 +254,7 @@ def test_full_setup_review_send_workflow(browser_app):
     expect(page.get_by_text("Profile and facts saved.",exact=True)).to_be_visible()
     expect(page.get_by_label("Resume name",exact=True)).to_have_value("Python CV")
     page.get_by_label("Matching keywords",exact=False).fill("python")
-    page.get_by_label("PDF",exact=True).set_input_files({"name":"cv.pdf","mimeType":"application/pdf","buffer":b"%PDF-1.4\nsynthetic fixture"})
+    page.get_by_label("PDF",exact=True).set_input_files({"name":"cv.pdf","mimeType":"application/pdf","buffer":pdf_bytes("synthetic fixture")})
     page.get_by_role("button",name="Register resume").click()
     expect(page.get_by_role("cell",name="Python CV",exact=True)).to_be_visible()
     open_view(page,"Contacts")

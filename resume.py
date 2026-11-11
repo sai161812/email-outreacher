@@ -1,10 +1,29 @@
 import hashlib
+import io
 import re
 from pathlib import Path
 from urllib.parse import urlparse
 import config
 from repository import ResumeRepository
 from errors import NotFound
+from pypdf import PdfReader
+
+
+def validate_pdf(data):
+    if not data.startswith(b"%PDF-") or len(data)>config.MAX_RESUME_BYTES:
+        raise ValueError("Resume must be a PDF within the size limit")
+    try:
+        reader=PdfReader(io.BytesIO(data),strict=True)
+        if reader.is_encrypted:
+            raise ValueError("Resume PDF must not be encrypted")
+        count=len(reader.pages)
+        if not 1<=count<=100:
+            raise ValueError("Resume PDF must contain 1-100 readable pages")
+        for page in reader.pages:
+            if float(page.mediabox.width)<=0 or float(page.mediabox.height)<=0:
+                raise ValueError("Resume PDF contains an invalid page")
+    except Exception as exc:
+        raise ValueError("Resume PDF must be readable, unencrypted and contain 1-100 pages") from exc
 
 def safe_url(value):
     if value is None or value=="":
@@ -26,9 +45,9 @@ def checked_pdf(path):
         raise ValueError("Copy the PDF into RESUME_DIR before registering it")
     if not target.is_file() or target.stat().st_size > config.MAX_RESUME_BYTES:
         raise ValueError("Resume PDF is missing or exceeds the size limit")
-    data = target.read_bytes()
-    if not data.startswith(b"%PDF-"):
-        raise ValueError("Resume must be a PDF")
+    with target.open("rb") as source:
+        data=source.read(config.MAX_RESUME_BYTES+1)
+    validate_pdf(data)
     return target, data
 
 def add_resume_variant(name, keywords="", file_path="", resume_url=None):

@@ -132,6 +132,7 @@ def create_app(overrides=None):
                    "profile":bool(candidate["profile"]),"context":bool(candidate["candidate_context"].strip())}
         return jsonify(**candidate,
             resumes=resume.list_resume_variants(),suppressions=SuppressionRepository.get_all(),readiness=readiness,
+            connection_verification={"gemini":"not_verified","smtp":"not_verified","imap":"not_verified"},
             configuration={"model":config.GEMINI_MODEL,"timezone":config.TIMEZONE_NAME,"daily_cap":config.DAILY_SEND_CAP,
                            "company_weekly_cap":config.MAX_PER_COMPANY_PER_WEEK,"resume_mode":config.RESUME_ATTACH_MODE,
                            "daily_remaining":max(0,config.DAILY_SEND_CAP-EmailRepository.count_sends_today()-rows("SELECT COUNT(*) n FROM send_attempts a JOIN emails e ON e.id=a.email_id WHERE a.state IN ('reserved','submitting','uncertain') AND e.sent_at IS NULL")[0]["n"])},
@@ -150,6 +151,13 @@ def create_app(overrides=None):
         context=contacts.text(data["candidate_context"],"candidate_context",True,20000) if "candidate_context" in data else None
         candidate_profile.save_settings(validated_profile,context)
         return jsonify(success=True)
+    @app.get("/api/settings/legacy-context")
+    def legacy_context():
+        path=config.BASE_DIR/"context.txt"
+        if not path.is_file(): raise NotFound("No legacy context.txt found")
+        with path.open("r",encoding="utf-8-sig") as source: content=source.read(20001)
+        if len(content)>20000: raise ValueError("Legacy facts exceed 20000 characters; shorten the file before importing")
+        return jsonify(candidate_context=content,source="context.txt")
     @app.get("/api/companies")
     def companies(): return jsonify(contacts.list_companies(*page(),request.args.get("search","")[:200]))
     @app.post("/api/companies")
@@ -195,7 +203,7 @@ def create_app(overrides=None):
         if not file or not file.filename or not file.filename.lower().endswith(".pdf"): raise ValueError("Upload a PDF")
         content=file.stream.read(config.MAX_RESUME_BYTES+1)
         if len(content)>config.MAX_RESUME_BYTES: return jsonify(error="Resume exceeds upload size limit"),413
-        if not content.startswith(b"%PDF-"): raise ValueError("Resume must be a PDF")
+        resume.validate_pdf(content)
         config.RESUME_DIR.mkdir(parents=True,exist_ok=True)
         target=config.RESUME_DIR/(uuid.uuid4().hex+".pdf")
         target.write_bytes(content)

@@ -12,6 +12,9 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+.venv-*/
+.python/
+.runtime-cache/
 .pytest_cache/
 .ruff_cache/
 .coverage

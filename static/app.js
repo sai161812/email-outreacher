@@ -202,8 +202,8 @@ async function trackingView(){
 }
 async function settingsView(){
     const setup=await api("/api/settings");settingsCache=setup;
-    const readiness=el("p",{},Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"ready":"needed")).join(" · "));
-    const root=el("div",{},title("Settings"),card("Readiness",readiness,
+    const readiness=el("p",{},Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"configured":"needed")).join(" · "));
+    const root=el("div",{},title("Settings"),card("Readiness",readiness,el("p",{class:"muted"},"Provider connections have not been verified. Configuration presence alone does not establish account access."),
         el("p",{class:"muted"},"Model: "+setup.configuration.model+" · Timezone: "+setup.configuration.timezone+" · Resume mode: "+setup.configuration.resume_mode)));
     const fields={};for(const key of ["full_name","email","phone","linkedin_url","github_url","portfolio_url"])fields[key]=input(setup.profile?.[key],key.includes("url")?"url":key==="email"?"email":"text");
     const context=el("textarea",{value:setup.candidate_context,rows:6});
@@ -218,6 +218,7 @@ async function settingsView(){
     async function refreshLists(){const serial=++listSerial;const data=await api("/api/settings");if(serial===listSerial){settingsCache=data;showLists(data);}}
     showLists(setup);
     root.append(card("Profile and verified candidate facts",Object.entries(fields).map(([key,node])=>field(key.replaceAll("_"," "),node)),field("Candidate facts — include only truthful skills and achievements",context),
+        button("Preview legacy context.txt",async()=>{if(context.value.trim()&&!confirm("Replace the visible facts with a preview of context.txt? Saved facts will change only when you save."))return;const data=await api("/api/settings/legacy-context");context.value=data.candidate_context;context.dispatchEvent(new Event("input"));context.focus();toast("Legacy facts loaded for review. Check them, then save profile and facts to import.");}),
         button("Save profile and facts",async()=>{
             const savingSerial=editSerial;
             const data={profile:Object.fromEntries(Object.entries(fields).map(([key,node])=>[key,node.value])),candidate_context:context.value};

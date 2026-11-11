@@ -4,6 +4,16 @@ import tempfile
 from pathlib import Path
 import pytest
 
+def pdf_bytes(label="fixture",pages=1,encrypted=False):
+    from io import BytesIO
+    from pypdf import PdfWriter
+    writer=PdfWriter()
+    for _ in range(pages): writer.add_blank_page(width=612,height=792)
+    writer.add_metadata({"/Title":label})
+    if encrypted: writer.encrypt("test-password")
+    output=BytesIO();writer.write(output)
+    return output.getvalue()
+
 # Import-time application setup must never open the user's database.
 _session = tempfile.TemporaryDirectory(prefix="outreach-test-session-")
 os.environ["OUTREACH_DB_PATH"] = str(Path(_session.name) / "session.db")

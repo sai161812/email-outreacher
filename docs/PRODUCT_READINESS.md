@@ -24,7 +24,11 @@ Fresh terminals matter if you previously ran the UI-only preview: environment va
 
 ## Start the installed product
 
-The existing `.venv` is installed. For a new machine or extracted source package, follow the README's locked installation steps first.
+Milestone 1 restored `.venv` using workspace-local Python 3.12.16. The previous
+environment is preserved in `.venv-preserved-milestone1`. For a new machine or
+extracted source package, install Python 3.12 and follow the README's locked
+installation steps first. October verification below is historical; see
+[Milestone 1 progress](MILESTONE_1.md) for current checks and remaining personal setup.
 
 Terminal 1:
 

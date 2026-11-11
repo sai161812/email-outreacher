@@ -1,3 +1,4 @@
+from conftest import pdf_bytes
 import json
 from unittest.mock import Mock
 from concurrent.futures import ThreadPoolExecutor
@@ -43,7 +44,7 @@ def test_persists_sources_and_safe_body(ready):
 
 def test_assigned_resume_drafts(ready):
     pdf=config.RESUME_DIR/"cv.pdf"
-    pdf.write_bytes(b"%PDF-1.4\nfixture")
+    pdf.write_bytes(pdf_bytes("fixture"))
     rid=resume.add_resume_variant("CV","python",str(pdf))
     company,person=ready
     eid=composer.compose_and_store(company,person,composer.candidate_context(),rid)

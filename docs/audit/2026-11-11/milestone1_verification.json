@@ -1,0 +1,20 @@
+{
+  "base_commit": "fe2bec9",
+  "source_state": "uncommitted working tree",
+  "scope": ["R01", "R02"],
+  "python": "3.12.16",
+  "regression": {"passed": 231, "failed": 0, "browser_cases": 11, "duration_seconds": 50.67},
+  "source_checks": "passed",
+  "dependency_compatibility": "passed",
+  "dependency_advisories": "no known vulnerabilities found",
+  "updated_advisory_affected_packages": ["certifi", "dnspython", "filelock", "pyasn1"],
+  "added_runtime_package": "pypdf==7.0.1",
+  "clean_working_tree_archive_smoke": "passed",
+  "legacy_copy_migration_and_restore": "passed",
+  "live_database": {"schema_version": 2, "integrity": "ok", "foreign_key_violations": 0, "contacts_preserved": 15, "redundant_contacts_archived": 4, "active_duplicate_groups": 0},
+  "status": "complete_under_revised_scope",
+  "remaining": [],
+  "deferred_to_milestone_5_R16": ["Owner supplies and registers actual resume PDF or deliberately selects No resume", "Owner reviews and saves candidate facts before live acceptance"],
+  "live_provider_calls": false,
+  "emails_sent": 0
+}
