@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS suppressions (
 """
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 STATUSES = ("pending_review", "approved", "sending", "sent", "replied", "ghosted",
             "bounced", "interview_scheduled", "interview_completed", "offer", "no_offer",
             "rejected", "failed", "uncertain", "canceled")
@@ -179,9 +179,15 @@ CREATE INDEX IF NOT EXISTS attempts_quota_idx ON send_attempts(state,created_at,
 CREATE INDEX IF NOT EXISTS events_email_idx ON events(email_id,kind);
 CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs(status,created_at);
 """)
+            attempt_columns={r[1] for r in conn.execute('PRAGMA table_info(send_attempts)')}
+            if 'sender' not in attempt_columns:
+                conn.execute("ALTER TABLE send_attempts ADD COLUMN sender TEXT NOT NULL DEFAULT ''")
+            conn.execute("""UPDATE emails SET status='pending_review',approval_json=NULL,revision=revision+1
+                WHERE status='approved' AND sent_at IS NULL
+                AND (approval_json IS NULL OR json_type(approval_json,'$.sender') IS NULL)""")
             duplicates = conn.execute("""SELECT COUNT(*) FROM (
                 SELECT company_id,lower(trim(email)) FROM contacts
-                GROUP BY company_id,lower(trim(email)) HAVING COUNT(*)>1)""").fetchone()[0]
+                WHERE archived=0 GROUP BY company_id,lower(trim(email)) HAVING COUNT(*)>1)""").fetchone()[0]
             mismatches = conn.execute("""SELECT COUNT(*) FROM emails e JOIN contacts c
                 ON e.contact_id=c.id WHERE e.company_id<>c.company_id""").fetchone()[0]
             conn.execute("DELETE FROM migration_reports")

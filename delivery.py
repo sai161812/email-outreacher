@@ -9,6 +9,15 @@ from db import get_connection
 from errors import Conflict
 from repository import require_email, snapshot, timestamp, event
 
+
+def bind_mailbox(conn):
+    account=config.GMAIL_ADDRESS.strip().lower()
+    if not account: return
+    row=conn.execute("SELECT value FROM settings WHERE key='sending_account'").fetchone()
+    if row and row['value']!=account:
+        raise Conflict("This database belongs to a different sending account; use its original account or a separate database")
+    conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES ('sending_account',?)",(account,))
+
 def _quota(conn, company_id, exclude=None, projected=()):
     local = config.now().astimezone(config.TIMEZONE)
     start = local.replace(hour=0,minute=0,second=0,microsecond=0)
@@ -46,11 +55,12 @@ def claim(eid):
         if row["status"] != "approved":
             return None
         approved = _validate(conn,row)
+        bind_mailbox(conn)
         _quota(conn,row["company_id"])
         message_id = make_msgid(domain="outreach.local")
         now = timestamp()
-        attempt_id = conn.execute("""INSERT INTO send_attempts(email_id,company_id,recipient,message_id,state,created_at,updated_at)
-            VALUES (?,?,?,?,'reserved',?,?)""",(eid,row["company_id"],approved["recipient"],message_id,now,now)).lastrowid
+        attempt_id = conn.execute("""INSERT INTO send_attempts(email_id,company_id,recipient,message_id,state,created_at,updated_at,sender)
+            VALUES (?,?,?,?,'reserved',?,?,?)""",(eid,row["company_id"],approved["recipient"],message_id,now,now,approved['sender'])).lastrowid
         conn.execute("UPDATE emails SET status='sending',message_id=?,updated_at=? WHERE id=?", (message_id,now,eid))
         event(conn,eid,"send_reserved",{"attempt_id":attempt_id})
         return {"attempt_id":attempt_id,"email_id":eid,"message_id":message_id,"snapshot":approved}
@@ -64,6 +74,7 @@ def prepare(attempt_id):
         if row["status"]!="sending":
             raise Conflict("Send claim is no longer valid")
         approved = _validate(conn,row)
+        bind_mailbox(conn)
         _quota(conn,row["company_id"],attempt_id)
         from sender import is_in_send_window
         if not is_in_send_window():

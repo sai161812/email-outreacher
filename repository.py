@@ -46,7 +46,7 @@ def snapshot(conn, row):
     if not ct or not company or ct["company_id"] != row["company_id"] or ct["archived"] or company["archived"]:
         raise Conflict("Contact/company is unavailable")
     asset = resume.delivery_asset(row.get("resume_variant_id"))
-    return {"revision": row["revision"], "subject": row["subject"], "body": row["body"],
+    return {"revision": row["revision"], "subject": row["subject"], "body": row["body"],"sender":config.GMAIL_ADDRESS.strip().lower(),
             "recipient": ct["email"].strip().lower(), "company_name": company["name"],
             "resume": asset, "attach_mode": config.RESUME_ATTACH_MODE}
 

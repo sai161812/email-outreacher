@@ -133,7 +133,7 @@ async function reviewView(){
         const subject=input(draft.subject),hook=input(draft.hook),body=el("textarea",{value:draft.body||"",rows:8});
         const variant=select([[0,"No resume"],...setup.resumes.map(r=>[r.id,r.name])],draft.resume_variant_id||0);
         const warnings=el("p",{class:"warning"},draft.qc_warnings||"Review facts, recipient, content and resume before approving.");
-        const status=el("p",{class:"muted"},"Revision "+draft.revision+" · Pending review");
+        const status=el("p",{class:"muted"},"Revision "+draft.revision+" · Pending review · Sender: "+(setup.configuration.sender||"Configure Gmail before approving"));
         const approve=button("Approve saved revision",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"approve",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Approved. Available in Queue.");},true),"primary",()=>writing||dirty.has(draft.id));
         const section=card(draft.company_name+" · "+draft.contact_email,status,field("Subject",subject),field("Research hook",hook),field("Body",body),field("Resume choice",variant),warnings);
         function syncActions(){save.disabled=writing;reject.disabled=writing;approve.disabled=writing||dirty.has(draft.id);}

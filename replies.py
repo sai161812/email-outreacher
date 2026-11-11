@@ -82,6 +82,8 @@ def _ok(result,operation):
 
 def check_replies(dry_run=False):
     config.require_gmail_creds()
+    from delivery import bind_mailbox
+    with get_connection(immediate=True) as conn: bind_mailbox(conn)
     candidates=EmailRepository.get_sent_candidates_for_replies()
     if not candidates:
         return []

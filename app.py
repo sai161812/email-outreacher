@@ -133,7 +133,7 @@ def create_app(overrides=None):
         return jsonify(**candidate,
             resumes=resume.list_resume_variants(),suppressions=SuppressionRepository.get_all(),readiness=readiness,
             connection_verification={"gemini":"not_verified","smtp":"not_verified","imap":"not_verified"},
-            configuration={"model":config.GEMINI_MODEL,"timezone":config.TIMEZONE_NAME,"daily_cap":config.DAILY_SEND_CAP,
+            configuration={"sender":config.GMAIL_ADDRESS,"model":config.GEMINI_MODEL,"timezone":config.TIMEZONE_NAME,"daily_cap":config.DAILY_SEND_CAP,
                            "company_weekly_cap":config.MAX_PER_COMPANY_PER_WEEK,"resume_mode":config.RESUME_ATTACH_MODE,
                            "daily_remaining":max(0,config.DAILY_SEND_CAP-EmailRepository.count_sends_today()-rows("SELECT COUNT(*) n FROM send_attempts a JOIN emails e ON e.id=a.email_id WHERE a.state IN ('reserved','submitting','uncertain') AND e.sent_at IS NULL")[0]["n"])},
             migration_reports=rows("SELECT * FROM migration_reports WHERE count>0"),
