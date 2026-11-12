@@ -34,6 +34,15 @@ def test_archive_requires_explicit_new_selection_and_auto_skips_unusable(contact
     with pytest.raises(ValueError): reviewer.approve(eid)
     assert resume.pick_best_variant('python') is None
 
+def test_auto_does_not_silently_drop_unusable_registered_resumes(contact):
+    from repository import ResumeRepository
+    ResumeRepository.create('Missing','python',str(config.RESUME_DIR/'missing.pdf'))
+    client=create_app({'TESTING':True}).test_client()
+    response=post(client,'/api/compose',{'company_id':contact[0],'contact_id':contact[1]})
+    assert response.status_code==400 and 'No resume explicitly' in response.get_json()['error']
+    response=post(client,'/api/compose',{'company_id':contact[0],'contact_id':contact[1],'resume_variant_id':None})
+    assert response.status_code==202
+
 @pytest.mark.parametrize('mode',['link','attach'])
 def test_preview_matches_mime_without_sending(contact,mail,monkeypatch,mode):
     monkeypatch.setattr(config,'RESUME_ATTACH_MODE',mode)

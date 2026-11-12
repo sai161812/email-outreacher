@@ -9,7 +9,7 @@ from repository import rows,one,timestamp,event,require_email,check_revision
 from errors import Conflict,NotFound
 import config
 
-FIELDS={'role','level','role_url','requisition','application_status','application_date','constraints','project_id','relationship','company_source','source_verified_date','job_text'}
+FIELDS={'role','level','role_url','requisition','application_status','application_date','constraints','project_id','relationship','company_source','source_verified_date','job_text','approach'}
 
 def projects():
     saved=one("SELECT value FROM settings WHERE key='projects'")

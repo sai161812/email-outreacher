@@ -15,7 +15,10 @@ from app import create_app
 pytestmark=pytest.mark.browser
 
 @pytest.fixture
-def browser_app(temp_db,monkeypatch):
+def browser_app(temp_db,monkeypatch,request):
+    if getattr(request,"param",False):
+        monkeypatch.setattr(config,"OWNER_PASSWORD","synthetic-owner-password")
+        monkeypatch.setattr(config,"SECRET_KEY","s"*32)
     monkeypatch.setattr(config,"GEMINI_API_KEY","synthetic-key")
     monkeypatch.setattr(config,"GMAIL_ADDRESS","owner@example.test")
     monkeypatch.setattr(config,"GMAIL_APP_PASSWORD","synthetic-password")
@@ -44,6 +47,72 @@ def browser_app(temp_db,monkeypatch):
 
 def open_view(page,name):
     page.get_by_role("navigation").get_by_role("button",name=name,exact=True).click()
+
+@pytest.mark.parametrize('browser_app',[True],indirect=True)
+def test_expired_owner_session_preserves_unsaved_fields_after_login(browser_app):
+    page,url,_,errors=browser_app
+    page.goto(url)
+    page.get_by_label('Password',exact=True).fill('synthetic-owner-password')
+    page.get_by_role('button',name='Sign in',exact=True).click()
+    open_view(page,'Settings')
+    page.get_by_label('full name',exact=True).fill('Unsaved Candidate')
+    page.get_by_label('Candidate facts',exact=False).fill('Unsaved verified project evidence')
+    page.context.clear_cookies()
+    page.evaluate("api('/api/stats').catch(()=>{})")
+    expect(page.get_by_role('heading',name='Owner sign in',exact=True)).to_be_visible()
+    page.get_by_label('Password',exact=True).fill('synthetic-owner-password')
+    page.get_by_role('button',name='Sign in',exact=True).click()
+    expect(page.get_by_label('full name',exact=True)).to_have_value('Unsaved Candidate')
+    expect(page.get_by_label('Candidate facts',exact=False)).to_have_value('Unsaved verified project evidence')
+    assert errors==[]
+
+def test_request_timeout_recovers_buttons_and_retry(browser_app):
+    page,url,_,errors=browser_app
+    page.goto(url)
+    expect(page.get_by_role('heading',name='Dashboard',exact=True)).to_be_visible()
+    page.evaluate("window.normalTimeout=window.setTimeout;window.setTimeout=(fn,ms,...args)=>window.normalTimeout(fn,ms===20000?100:ms,...args)")
+    held=[];page.route('**/api/stats',lambda route:held.append(route))
+    page.get_by_role('button',name='Refresh',exact=True).click()
+    expect(page.get_by_role('button',name='Retry',exact=True)).to_be_enabled()
+    page.unroute('**/api/stats')
+    page.evaluate('window.setTimeout=window.normalTimeout')
+    page.get_by_role('button',name='Retry',exact=True).click()
+    expect(page.get_by_role('heading',name='Dashboard',exact=True)).to_be_visible()
+    assert errors==[]
+
+@pytest.mark.parametrize('width',[375,768,1440])
+def test_populated_review_tracking_and_unsaved_dialog(browser_app,contact,width):
+    import candidate_profile,composer
+    from repository import ContactRepository,EmailRepository
+    from db import get_connection
+    page,url,_,errors=browser_app
+    candidate_profile.set_profile('Synthetic Candidate')
+    composer.manual_draft(*contact,'Backend engineering opportunities at Example','I am exploring entry-level backend work at Example. My personal Python dashboard validates CSV imports, queries SQLite and produces weekly summaries. Building it gave me experience with input validation and making stored data useful. Could you advise on the appropriate application route?')
+    cid=ContactRepository.create(contact[0],'history@example.test','History Person')
+    eid=EmailRepository.create(contact[0],cid,None,'H','Backend role follow-up','Recorded correspondence',None)
+    with get_connection() as conn: conn.execute("UPDATE emails SET status='sent',sent_at='2026-11-01T10:00:00+00:00' WHERE id=?",(eid,))
+    page.set_viewport_size({'width':width,'height':1000});page.goto(url)
+    open_view(page,'Review')
+    expect(page.get_by_label('Subject',exact=True)).to_be_visible()
+    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+    Path('test-results').mkdir(exist_ok=True)
+    page.screenshot(path=f'test-results/milestone4-review-{width}.png',full_page=True)
+    open_view(page,'Tracking')
+    expect(page.get_by_label(f'Outcome for email #{eid}',exact=True)).to_have_value('')
+    page.get_by_role('button',name='Apply outcome',exact=True).click()
+    expect(page.get_by_text('Choose an outcome before applying.',exact=False).first).to_be_visible()
+    assert EmailRepository.get_by_id(eid)['status']=='sent'
+    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+    page.screenshot(path=f'test-results/milestone4-tracking-{width}.png',full_page=True)
+    open_view(page,'Companies');page.get_by_role('button',name='Add company',exact=True).click()
+    page.get_by_label('name',exact=True).fill('Unsaved research company')
+    page.once('dialog',lambda dialog:dialog.dismiss());page.keyboard.press('Escape')
+    expect(page.get_by_role('dialog')).to_be_visible()
+    expect(page.get_by_label('name',exact=True)).to_have_value('Unsaved research company')
+    page.screenshot(path=f'test-results/milestone4-dialog-{width}.png',full_page=True)
+    page.once('dialog',lambda dialog:dialog.accept());page.get_by_role('button',name='Cancel',exact=True).click()
+    expect(page.get_by_role('dialog')).to_have_count(0)
+    assert errors==[]
 
 def test_company_selector_reaches_later_pages_and_preserves_selection(browser_app,contact):
     from repository import CompanyRepository,rows
@@ -365,7 +434,7 @@ def test_full_setup_review_send_workflow(browser_app):
     assert smtp.sendmail.call_count==1
     open_view(page,"Tracking")
     expect(page.get_by_role("cell",name="sent",exact=True)).to_be_visible()
-    page.get_by_role("combobox").select_option("replied")
+    page.get_by_label("Outcome for email #1",exact=True).select_option("replied")
     page.get_by_role("button",name="Apply outcome").click()
     expect(page.get_by_role("cell",name="replied",exact=True)).to_be_visible()
     Path("test-results").mkdir(exist_ok=True)

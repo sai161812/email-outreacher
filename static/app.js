@@ -3,7 +3,7 @@ const content=document.getElementById("content"),nav=document.getElementById("na
 let csrf="",view="Dashboard",epoch=0,dirty=new Set(),contactsOffset=0,contactSearch="",settingsCache=null,loggedIn=false;
 const pendingWrites=new Set();
 const offsets={Companies:0,Review:0,Queue:0,Tracking:0};
-let operationId=null,reviewFocus=null;
+let operationId=null,reviewFocus=null,suspendedView=null;
 const pages=["Dashboard","Contacts","Companies","Review","Queue","Tracking","Targets","Settings","Jobs"];
 function el(tag,attrs={},...children){
     const node=document.createElement(tag);
@@ -27,17 +27,17 @@ async function api(path,method="GET",data=null,requestKey=null){
     const task=(async()=>{
         const response=await fetch(path,options);
         let result;try{result=await response.json();}catch{throw new Error("Server returned an unreadable response. Check the connection.");}
-        if(!response.ok){if(response.status===401)await loginScreen();const error=new Error(result.error||"Request failed");error.status=response.status;throw error;}
+        if(!response.ok){if(response.status===401){if(path!=="/api/session"){const fresh=await api("/api/session");csrf=fresh.csrf;}await loginScreen();}const error=new Error(result.error||"Request failed");error.status=response.status;throw error;}
         return result;
     })();
     if(method!=="GET")pendingWrites.add(task);
-    try{return await task;}catch(error){if(!error.status)throw new Error(method==="GET"?"Request timed out or connection failed. Retry when the server is reachable.":"Request outcome unknown. Check Jobs before retrying; your input has been preserved.");throw error;}finally{clearTimeout(timer);pendingWrites.delete(task);}
+    try{return await task;}catch(error){if(!error.status)throw new Error(method==="GET"?"Request timed out or connection failed. Retry when the server is reachable.":"Request outcome unknown. Check the current records and Jobs before retrying; your input has been preserved.");throw error;}finally{clearTimeout(timer);pendingWrites.delete(task);}
 }
 function button(label,fn,kind="",isDisabled=()=>false){
     const b=el("button",{type:"button",class:kind},label);
     b.addEventListener("click",async()=>{
         if(b.disabled)return;b.disabled=true;b.setAttribute("aria-busy","true");
-        try{await fn(b);}catch(error){toast(error.message,true);}
+        try{await fn(b);}catch(error){const dialog=b.closest('dialog');if(dialog){const message=dialog.querySelector('[role="alert"]');message.textContent=error.message;message.hidden=false;}else{toast(error.message,true);const previous=b.parentElement?.querySelector('.action-error');previous?.remove();b.parentElement?.append(el('p',{class:'error action-error',role:'alert'},error.message));}}
         finally{b.disabled=isDisabled();b.removeAttribute("aria-busy");}
     });return b;
 }
@@ -51,10 +51,16 @@ function select(items,value){return el("select",{},items.map(([v,label])=>option
 function card(heading,...children){return el("section",{class:"card"},el("h3",{},heading),children);}
 function safeLink(url,label){try{if(new URL(url).protocol!=="https:")return el("span",{},label);return el("a",{href:url,target:"_blank",rel:"noopener noreferrer"},label);}catch{return el("span",{},label);}}
 function modal(heading,form){
-    const returnFocus=document.activeElement;
-    const dialog=el("dialog",{"aria-label":heading},el("h2",{},heading),form);
-    dialog.append(button("Cancel",()=>dialog.close()));
-    dialog.addEventListener("close",()=>{dialog.remove();returnFocus?.focus();});
+    const returnFocus=document.activeElement,key='dialog:'+crypto.randomUUID();
+    const error=el('p',{class:'error',role:'alert',hidden:true});
+    const dialog=el('dialog',{'aria-label':heading},el('h2',{},heading),error,form);
+    const nativeClose=dialog.close.bind(dialog);
+    dialog.close=(...args)=>{dirty.delete(key);nativeClose(...args);};
+    const discard=()=>{if(!dirty.has(key)||confirm('Discard unsaved form changes?'))dialog.close();};
+    form.addEventListener('input',()=>dirty.add(key));form.addEventListener('change',()=>dirty.add(key));
+    dialog.addEventListener('cancel',event=>{event.preventDefault();discard();});
+    dialog.append(button('Cancel',discard));
+    dialog.addEventListener('close',()=>{dirty.delete(key);dialog.remove();returnFocus?.focus();});
     document.body.append(dialog);dialog.showModal();return dialog;
 }
 async function queued(path,data={}){
@@ -83,7 +89,7 @@ async function reviewBatch(){
 async function navigate(next){
     await Promise.allSettled([...pendingWrites]);
     if(dirty.size&&!confirm("Leave without saving your edits?"))return;
-    dirty.clear();view=next;
+    dirty.clear();document.getElementById("toasts").replaceChildren();view=next;
     nav.querySelectorAll("button").forEach(b=>b.setAttribute("aria-current",b.textContent===view?"page":"false"));
     await render();
 }
@@ -98,8 +104,12 @@ async function dashboard(){
     const root=el("div",{},title("Dashboard",button("Refresh",render),button("Preview send batch",()=>queued("/api/send",{dry_run:true})),button("Send approved batch",reviewBatch,"primary"),button("Check replies",()=>queued("/api/check_replies"))));
     const missing=Object.entries(setup.readiness).filter(([,ready])=>!ready).map(([key])=>key);
     if(missing.length)root.append(el("p",{class:"notice"},"Setup needed: "+missing.join(", ")+". Open Settings before drafting or sending."));
+    const next=!setup.readiness.profile?['Finish setup','Settings']:data.summary.pending_review?['Review drafts','Review']:data.summary.approved?['Preview approved mail','Queue']:['Choose a contact','Contacts'];
+    root.append(card('Next step',button(next[0],()=>navigate(next[1]),'primary')));
     root.append(el("p",{class:"notice"},"Daily remaining capacity: "+setup.configuration.daily_remaining+" of "+setup.configuration.daily_cap+". Outstanding uncertain attempts consume capacity."));
     root.append(el("div",{class:"grid"},["pending_review","approved","sent","replied"].map(key=>card(key.replaceAll("_"," "),el("div",{class:"metric"},data.summary[key]||0)))));
+    const funnel=data.contact_funnel;
+    root.append(card('Hiring conversations',el('p',{},funnel.denominator),table(['Contacted people','Initial contacts','Messages','Human responses','Positive interest/referrals','Interviews','Offers'],[el('tr',{},[funnel.contacted,funnel.initial_contacts,funnel.sent_messages,funnel.human_responses,funnel.positive_interest_or_referral,funnel.interviews,funnel.offers].map(v=>cell(v)))]),el('p',{},funnel.response_basis+' '+funnel.interpretation),el('details',{},el('summary',{},'Role, proof and approach cohorts'),table(['Role','Proof','Approach','Month','People','Responses','Positive','Interviews','Offers'],funnel.cohorts.map(c=>el('tr',{},[c.role,c.proof,c.approach,c.month,c.contacted,c.human_responses,c.positive_interest_or_referral,c.interviews,c.offers].map(v=>cell(v,true))))))));
     root.append(card("Resume performance",el("p",{class:"muted"},"Rates count sent messages, including follow-ups."),table(["Resume","Sent","Replies","Interviews","Offers","Reply rate"],data.stats.by_variant.map(v=>el("tr",{},[v.name,v.sent,v.replied,v.interviews,v.offers,v.reply_rate+"%"].map(value=>cell(value)))))));
     return root;
 }
@@ -115,8 +125,11 @@ async function contactsView(){
     }
     const search=input(contactSearch);search.setAttribute("aria-label","Search contacts");
     const file=el("input",{type:"file",accept:".csv","aria-label":"Import contacts CSV"});
-    file.addEventListener("change",async()=>{if(!file.files.length)return;const form=new FormData();form.append("file",file.files[0]);try{const r=await api("/api/contacts/import","POST",form);toast(r.contacts_created+" contacts added; "+r.duplicates_skipped+" duplicates skipped.");if(r.errors.length)toast(r.errors.map(e=>"Row "+e.row+": "+e.error).join("; "),true);await render();}catch(e){toast(e.message,true);}finally{file.value="";}});
-    const root=el("div",{},title("Contacts",button("Add contact",()=>contactForm(companies)),button("Search",async()=>{contactSearch=search.value;contactsOffset=0;await render();})),field("Search name, company or email",search),field("Import CSV",file));
+    const importError=el('p',{class:'error',role:'alert',hidden:true});
+    async function importFile(){if(!file.files.length)return;const form=new FormData();form.append('file',file.files[0]);try{await api('/api/contacts/import','POST',form);await render();}catch(error){importError.textContent=error.message;importError.hidden=false;}}
+    file.addEventListener('change',importFile);
+    const root=el("div",{},title("Contacts",button("Add contact",()=>contactForm(companies)),button("Search",async()=>{contactSearch=search.value;contactsOffset=0;await render();})),field("Search name, company or email",search),field("Import CSV",file),button("Import selected CSV",importFile),importError);
+    if(setup.import_report.length){const report=JSON.parse(setup.import_report[0].value);root.append(card('Last CSV import',el('p',{},report.contacts_created+' contacts added; '+report.duplicates_skipped+' duplicates skipped; '+report.errors.length+' row errors.'),table(['Row','Issue'],report.errors.map(e=>el('tr',{},cell(e.row),cell(e.error,true))))));}
     root.append(field("Role for new drafts",target),field("Resume for new drafts",draftResume));
     root.append(table(["Company","Name","Email","Actions"],people.map(p=>el("tr",{},cell(p.company_name,true),cell(p.name||"—",true),cell(p.email),cell(el("div",{class:"actions"},button("Draft",()=>draftFor(p)),button("Write manually",()=>manualDraftForm(p,setup,chosenTarget(p))),button("Edit",()=>contactForm(companies,p)),button("Do not contact",()=>suppressAddress(p.email)),button("Check DNS",async()=>{const result=await api("/api/contacts/"+p.id+"/validate","POST",{});toast((result.warning||"Domain accepts mail in DNS")+". "+result.note,!!result.warning);})))))));
     if(!people.length)root.append(el("p",{},"No contacts found. Add a company first, or import the sample CSV."));
@@ -168,7 +181,7 @@ function targetForm(companies,projects,target=null){
     if(!companies.length){toast('Add a company first.',true);return;}
     const company=select(companies.map(c=>[c.id,c.name]),target?.company_id||companies[0].id);company.disabled=!!target;
     const nodes={};
-    for(const key of ['role','level','role_url','requisition','application_date','constraints','relationship','company_source','source_verified_date'])nodes[key]=input(target?.[key]||'',key.endsWith('date')?'date':key.includes('url')||key==='company_source'?'url':'text');
+    for(const key of ['role','level','role_url','requisition','application_date','constraints','relationship','company_source','source_verified_date','approach'])nodes[key]=input(target?.[key]||'',key.endsWith('date')?'date':key.includes('url')||key==='company_source'?'url':'text');
     nodes.application_status=select([['unknown','Unknown'],['not_applied','Not applied'],['applied','Applied (owner confirmed)']],target?.application_status||'unknown');
     nodes.project_id=select([['','No selected project'],...projects.map(p=>[p.id,p.name])],target?.project_id||'');
     nodes.job_text=el('textarea',{rows:6,value:target?.job_text||''});
@@ -204,9 +217,9 @@ async function reviewView(){
         }
         const mark=()=>{editSerial++;dirty.add(draft.id);approve.disabled=true;status.textContent="Unsaved edits — save before approving";};
         for(const node of [subject,hook,body,variant])node.addEventListener("input",mark);
-        section.append(el("details",{},el("summary",{},"Research notes and sources"),el("p",{class:"warning"},"AI-written notes and URLs require independent verification."),el("pre",{},draft.research_notes||"No source evidence saved; verify company claims independently."),
+        section.append(el("details",{},el("summary",{},"Research notes and sources"),el("p",{class:"warning"},"AI-written notes and URLs require independent verification."),el("p",{class:"research-notes"},draft.research_notes||"No source evidence saved; verify company claims independently."),
             el("ul",{class:"sources"},[...new Set((draft.research_notes||"").match(/https:\/\/[^\s<>]+/g)||[])].map(url=>el("li",{},safeLink(url,url)))),
-            el("pre",{},draft.grounding_json||"")));
+            el("details",{},el("summary",{},"Raw grounding diagnostics"),el("pre",{},draft.grounding_json||""))));
         const evidence=draft.input_snapshot_json?JSON.parse(draft.input_snapshot_json):null;
         if(evidence){
             const proof=evidence.project,role=evidence.opportunity;
@@ -260,10 +273,12 @@ async function trackingView(){
     root.append(card("Due for follow-up",table(["Company","Recipient","Actions"],due.map(r=>el("tr",{},cell(r.company_name,true),cell(r.contact_email),cell(button("Draft follow-up",()=>followupForm(r,setup))))))));
     const statuses=["replied","ghosted","bounced","interview_scheduled","interview_completed","offer","no_offer"];
     root.append(table(["Company","Recipient","Status","Sent","Update"],tracked.map(r=>{
-        const choice=select(statuses.map(s=>[s,s.replaceAll("_"," ")]),r.status);
+        const choice=select([["","Choose outcome"],...(r.allowed_outcomes||[]).map(s=>[s,s.replaceAll("_"," ")])],"");
         choice.setAttribute("aria-label","Outcome for email #"+r.id);
         const action=el("div",{class:"actions"},button("Do not contact",()=>suppressAddress(r.contact_email)));
-        if(r.sent_at)action.append(choice,button("Apply outcome",async()=>{await api("/api/tracking/"+r.id+"/mark","POST",{status:choice.value});await render();}));
+        if(r.sent_at)action.append(choice,button("Apply outcome",async()=>{if(!choice.value)throw new Error("Choose an outcome before applying.");await api("/api/tracking/"+r.id+"/mark","POST",{status:choice.value});await render();}));
+        if(r.sent_at){const category=select(['unknown','positive_interest','referral','rejection','not_hiring','other'].map(c=>[c,c.replaceAll('_',' ')]),r.response_category||'unknown');category.setAttribute('aria-label','Response category for email #'+r.id);action.append(category,button('Save response category',async()=>{await api('/api/tracking/'+r.id+'/category','POST',{category:category.value});await render();}));}
+        if(r.correctable_event_id)action.append(button('Correct latest manual outcome',()=>{const reason=el('textarea');const form=el('div',{},el('p',{},'Restore the status before this manual action. Submission history, response categories and suppressions stay unchanged; canceled follow-ups are not restarted. Adjust a mistaken response category separately.'),field('Correction reason',reason));const dialog=modal('Correct manual outcome',form);form.append(button('Record correction',async()=>{await api('/api/tracking/'+r.id+'/correct','POST',{event_id:r.correctable_event_id,reason:reason.value});dialog.close();await render();}));}));
         if(["failed","canceled"].includes(r.status))action.append(button("Review retry",async()=>{await api("/api/emails/"+r.id+"/retry","POST",{});await render();toast("Returned to review. Approve again after resolving the failure.");}));
         return el("tr",{},cell(r.company_name,true),cell(r.contact_email),cell(r.status),cell(r.sent_at?new Date(r.sent_at).toLocaleString():"Not confirmed sent"),cell(action));
     })));
@@ -309,12 +324,14 @@ async function settingsView(){
             toast(dirty.has("settings")?"Profile and facts saved. Newer edits remain unsaved.":"Profile and facts saved.");
         },"primary")));
     const name=input(),keywords=input(),url=input("","url"),file=el("input",{type:"file",accept:".pdf"});
+    let resumeEditSerial=0;for(const node of [name,keywords,url,file])node.addEventListener('input',()=>{resumeEditSerial++;dirty.add('resume-registration');});
     root.append(card("Resume variants",el("p",{},"Upload PDFs you wrote, or register a public HTTPS link. Delivery uses the configured mode."),
         field("Resume name",name),field("Matching keywords, separated by commas",keywords),field("PDF",file),field("HTTPS resume link (optional for attachments)",url),
         button("Register resume",async()=>{
+            const savingSerial=resumeEditSerial;
             let data;if(file.files.length){data=new FormData();data.append("file",file.files[0]);data.append("name",name.value);data.append("keywords",keywords.value);data.append("resume_url",url.value);}
             else data={name:name.value,keywords:keywords.value,resume_url:url.value};
-            await api("/api/resumes","POST",data);toast("Resume registered.");await refreshLists();
+            await api("/api/resumes","POST",data);if(resumeEditSerial===savingSerial)dirty.delete("resume-registration");toast("Resume registered.");await refreshLists();
         }),resumeList));
     const address=input("","email"),reason=input();
     root.append(card("Suppressions",field("Email to suppress",address),field("Reason",reason),button("Suppress address",async()=>{await api("/api/suppressions","POST",{email:address.value,reason:reason.value});await refreshLists();}),suppressionList));
@@ -356,6 +373,8 @@ async function pollOperation(){
 }
 const loaders={Dashboard:dashboard,Contacts:contactsView,Companies:companiesView,Review:reviewView,Queue:queueView,Tracking:trackingView,Targets:targetsView,Settings:settingsView,Jobs:jobsView};
 async function loginScreen(){
+    if(loggedIn&&dirty.size&&!suspendedView)suspendedView={view,nodes:[...content.childNodes]};
+    nav.querySelectorAll('button').forEach(b=>b.disabled=true);
     loggedIn=false;epoch++;
     content.setAttribute("aria-busy","false");
     const password=input("","password");password.autocomplete="current-password";
@@ -374,7 +393,8 @@ async function boot(){
     loggedIn=true;
     const recovered=await api('/api/jobs');
     operationId=recovered.find(j=>['pending','running'].includes(j.status))?.id||null;
-    await render();
+    if(suspendedView){view=suspendedView.view;content.replaceChildren(...suspendedView.nodes);suspendedView=null;content.setAttribute('aria-busy','false');nav.querySelectorAll('button').forEach(b=>{b.disabled=false;b.setAttribute('aria-current',b.textContent===view?'page':'false');});}
+    else await render();
 }
 window.addEventListener("beforeunload",event=>{if(dirty.size){event.preventDefault();event.returnValue="";}});
 setInterval(()=>{pollOperation().catch(error=>toast(error.message,true));if(loggedIn&&view==="Jobs"&&!dirty.size)render();},4000);

@@ -272,7 +272,7 @@ class EmailRepository:
                          (json.dumps(approved,sort_keys=True),timestamp(),eid))
             event(conn,eid,"approved",{"revision":row["revision"]})
     @staticmethod
-    def update_status(eid, status, set_updated_at=True, set_sent_at=False, sent_at_time=None,suppress_bounce=True):
+    def update_status(eid, status, set_updated_at=True, set_sent_at=False, sent_at_time=None,suppress_bounce=True,source='system',operation_id=None):
         if status == "approved":
             return EmailRepository.approve(eid)
         with get_connection(immediate=True) as conn:
@@ -284,7 +284,7 @@ class EmailRepository:
             if status in {"replied","ghosted","bounced","interview_scheduled","interview_completed","offer","no_offer"} and not row["sent_at"]:
                 raise Conflict("Only actually sent emails can have outcomes")
             conn.execute("UPDATE emails SET status=?,updated_at=? WHERE id=?", (status,timestamp(),eid))
-            event(conn,eid,status)
+            event(conn,eid,status,{'source':source,'previous_status':row['status'],'operation_id':operation_id})
             if status == "bounced" and suppress_bounce:
                 ct = conn.execute("SELECT email FROM contacts WHERE id=?", (row["contact_id"],)).fetchone()
                 suppress_in_transaction(conn,ct['email'],'invalid mailbox')

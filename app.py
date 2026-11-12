@@ -124,7 +124,7 @@ def create_app(overrides=None):
         session.clear()
         return jsonify(success=True)
     @app.get("/api/stats")
-    def stats(): return jsonify(summary=tracker.pipeline_summary(),stats=tracker.stats())
+    def stats(): return jsonify(summary=tracker.pipeline_summary(),stats=tracker.stats(),contact_funnel=tracker.contact_funnel())
     @app.get("/api/settings")
     def settings():
         candidate=candidate_profile.get_settings()
@@ -140,6 +140,7 @@ def create_app(overrides=None):
             duplicate_contacts=ContactRepository.duplicate_groups(),
             reply_scan=rows("SELECT value FROM settings WHERE key='reply_scan'"),
             suppression_history=rows('SELECT email,action,reason,created_at FROM suppression_events ORDER BY id DESC LIMIT 100'),
+            import_report=rows("SELECT value FROM settings WHERE key='last_import_report'"),
             skipped_reply_reports=rows("SELECT key,value FROM settings WHERE key LIKE 'reply_report:%'"),
             worker=rows("SELECT value FROM settings WHERE key='worker_heartbeat'"))
     @app.post('/api/reply-reports/review')
@@ -233,7 +234,10 @@ def create_app(overrides=None):
         if len(raw)>config.MAX_UPLOAD_BYTES: return jsonify(error="CSV exceeds upload size limit"),413
         try: text=raw.decode("utf-8-sig")
         except UnicodeDecodeError as exc: raise ValueError("CSV must use UTF-8 encoding") from exc
-        return jsonify(contacts.import_stream(io.StringIO(text,newline="")))
+        report=contacts.import_stream(io.StringIO(text,newline=""))
+        with db.get_connection() as conn:
+            conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('last_import_report',?)",(json.dumps(report),))
+        return jsonify(report)
     @app.post("/api/contacts/<int:cid>/validate")
     def validate_contact(cid):
         payload(set())
@@ -332,7 +336,7 @@ def create_app(overrides=None):
         else: raise ValueError("Unknown review action")
         return jsonify(success=True,email=EmailRepository.get_by_id(eid))
     @app.get("/api/tracking")
-    def tracking(): return jsonify(EmailRepository.get_all_tracked_emails(*page()))
+    def tracking(): return jsonify(tracker.tracking_page(*page()))
     @app.get("/api/tracking/due")
     def due(): return jsonify(tracker.due_for_follow_up(*page()))
     @app.post("/api/tracking/<int:eid>/mark")
@@ -342,7 +346,17 @@ def create_app(overrides=None):
                  "interview_scheduled":tracker.mark_interview_scheduled,"interview_completed":tracker.mark_interview_completed,
                  "offer":tracker.mark_offer,"no_offer":tracker.mark_no_offer}
         if not isinstance(data["status"],str) or data["status"] not in actions: raise ValueError("Unknown tracking action")
-        actions[data["status"]](eid)
+        actions[data["status"]](eid,source='manual')
+        return jsonify(success=True)
+    @app.post('/api/tracking/<int:eid>/correct')
+    def correct_outcome(eid):
+        data=payload({'event_id','reason'},{'event_id','reason'})
+        tracker.correct_outcome(eid,ident(data['event_id']),contacts.text(data['reason'],'reason',True,1000))
+        return jsonify(success=True)
+    @app.post('/api/tracking/<int:eid>/category')
+    def response_category(eid):
+        data=payload({'category'},{'category'})
+        tracker.categorize(eid,data['category'])
         return jsonify(success=True)
     @app.post("/api/compose")
     def compose():
@@ -356,6 +370,8 @@ def create_app(overrides=None):
             company={**company,'job_text':opportunity['job_text']}
         if "resume_variant_id" not in data:
             selected=resume.pick_best_variant(company.get("job_text"))
+            if selected is None and resume.list_resume_variants():
+                raise ValueError('No registered resume is usable in the configured delivery mode. Choose No resume explicitly or register a replacement.')
             data["resume_variant_id"]=selected["id"] if selected else None
             if selected and resume.matching_score(selected,company.get('job_text'))==0:
                 data['resume_match_warning']='Automatic resume selection had no keyword match; confirm this variant or choose No resume'

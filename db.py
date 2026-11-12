@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS suppressions (
 """
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 STATUSES = ("pending_review", "approved", "sending", "sent", "replied", "ghosted",
             "bounced", "interview_scheduled", "interview_completed", "offer", "no_offer",
             "rejected", "failed", "uncertain", "canceled")
@@ -137,7 +137,8 @@ def _init_db_locked():
                     "grounding_json": "TEXT", "generation_error": "TEXT",
                     "thread_root_id": "INTEGER REFERENCES emails(id)",
                     "opportunity_id":"INTEGER REFERENCES opportunities(id)",
-                    "input_snapshot_json":"TEXT", "evidence_verified_at":"TEXT"
+                    "input_snapshot_json":"TEXT", "evidence_verified_at":"TEXT",
+                    "response_category":"TEXT NOT NULL DEFAULT 'unknown'"
                 }
             }
             for table, columns in additions.items():
