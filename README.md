@@ -50,6 +50,26 @@ The factory also initializes/migrates the database when imported by Flask or Wai
 
 ## First use
 
+Milestone 4 completes everyday recovery and management. Jobs retains queued intent
+keys through lost responses, recovers active work on reload and provides item-level
+actions plus worker heartbeat/stage information. Unknown outcomes must be checked
+before retrying; a new send is never silently issued to recover a lost response.
+
+Contact forms can search/page companies without losing their selection. In
+Settings, **Edit or replace** creates a new resume version and returns affected
+unsent drafts to review; old submitted versions and PDFs are retained. **Archive
+resume** does not silently remove a selected asset. In Review, save edits and use
+**Preview final email** to inspect actual content, resume link and attachment name
+before approving. Missing automatic assets require an explicit No resume choice.
+
+Tracking starts with **Choose outcome**, offers only valid actions and supports
+**Correct latest manual outcome** with a recorded reason. Corrections preserve
+submission history and suppressions. Record a response category explicitly; unknown
+is available and rejection is not positive interest. The Dashboard's unique-person
+funnel is separate from sent-message totals and includes descriptive role/proof/
+approach cohorts. [Milestone 4 verification](docs/MILESTONE_4.md) records the limits
+and 293-test acceptance evidence.
+
 Milestone 3 adds **Targets** for multiple role briefs at a company and up to three
 owner-supplied projects. Record role/level, job text, application status/date,
 constraints, relationship context, proof and company sources. Dates and claims

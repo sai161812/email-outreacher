@@ -1,5 +1,11 @@
 # Product acceptance and startup
 
+Current Milestone 4 application source **ea80456** passed **293 automated tests**,
+including 19 Chromium cases, clean committed-release installation and schema 7
+migration/restore checks on 12 November 2026. See [Milestone 4 evidence](MILESTONE_4.md).
+R11 live-provider/human quality acceptance is still pending in Milestone 3;
+personal resume/account setup and Milestone 5 remain outstanding.
+
 Milestone 3 application source **beaf2bf** passed **273 automated tests**, including
 12 browser cases, clean committed-release installation and schema 6 migration/
 restore checks. See [Milestone 3 evidence](MILESTONE_3.md). R09/R10 are complete;
