@@ -3,7 +3,7 @@ const content=document.getElementById("content"),nav=document.getElementById("na
 let csrf="",view="Dashboard",epoch=0,dirty=new Set(),contactsOffset=0,contactSearch="",settingsCache=null,loggedIn=false;
 const pendingWrites=new Set();
 const offsets={Companies:0,Review:0,Queue:0,Tracking:0};
-let operationId=null;
+let operationId=null,reviewFocus=null;
 const pages=["Dashboard","Contacts","Companies","Review","Queue","Tracking","Targets","Settings","Jobs"];
 function el(tag,attrs={},...children){
     const node=document.createElement(tag);
@@ -18,19 +18,20 @@ function el(tag,attrs={},...children){
     return node;
 }
 function toast(message,error=false){const n=el("div",{class:"toast"+(error?" error":"")},message);document.getElementById("toasts").append(n);setTimeout(()=>n.remove(),6000);}
-async function api(path,method="GET",data=null){
-    const options={method,headers:{}};
-    if(method!=="GET"){options.headers["X-CSRF-Token"]=csrf;options.headers["Idempotency-Key"]=crypto.randomUUID();}
+async function api(path,method="GET",data=null,requestKey=null){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
+    const options={method,headers:{},signal:controller.signal};
+    if(method!=="GET"){options.headers["X-CSRF-Token"]=csrf;options.headers["Idempotency-Key"]=requestKey||crypto.randomUUID();}
     if(data instanceof FormData)options.body=data;
     else if(data!==null){options.headers["Content-Type"]="application/json";options.body=JSON.stringify(data);}
     const task=(async()=>{
         const response=await fetch(path,options);
         let result;try{result=await response.json();}catch{throw new Error("Server returned an unreadable response. Check the connection.");}
-        if(!response.ok){if(response.status===401)await loginScreen();throw new Error(result.error||"Request failed");}
+        if(!response.ok){if(response.status===401)await loginScreen();const error=new Error(result.error||"Request failed");error.status=response.status;throw error;}
         return result;
     })();
     if(method!=="GET")pendingWrites.add(task);
-    try{return await task;}finally{pendingWrites.delete(task);}
+    try{return await task;}catch(error){if(!error.status)throw new Error(method==="GET"?"Request timed out or connection failed. Retry when the server is reachable.":"Request outcome unknown. Check Jobs before retrying; your input has been preserved.");throw error;}finally{clearTimeout(timer);pendingWrites.delete(task);}
 }
 function button(label,fn,kind="",isDisabled=()=>false){
     const b=el("button",{type:"button",class:kind},label);
@@ -57,7 +58,13 @@ function modal(heading,form){
     document.body.append(dialog);dialog.showModal();return dialog;
 }
 async function queued(path,data={}){
-    const job=await api(path,"POST",data);
+    const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(path+JSON.stringify(data))))).map(n=>n.toString(16).padStart(2,'0')).join('');
+    const storageKey='outreach-intent:'+digest;
+    const key=localStorage.getItem(storageKey)||crypto.randomUUID();localStorage.setItem(storageKey,key);
+    let job;
+    try{job=await api(path,'POST',data,key);}
+    catch(error){try{job=await api('/api/jobs/by-key/'+key);}catch{throw error;}}
+    localStorage.removeItem(storageKey);
     operationId=job.id;
     toast("Operation queued. See Jobs for progress and results.");
     document.getElementById("operation-status").textContent="Job #"+job.id+" is "+job.status+". A worker processes queued operations.";
@@ -172,7 +179,7 @@ function projectsForm(projects){
     form.append(button('Save projects',async()=>{const items=entries.filter(e=>e.name.value.trim()||e.action.value.trim()).map(e=>({...(e.id?{id:e.id}:{}),name:e.name.value,action:e.action.value,result:e.result.value,proof_url:e.proof_url.value}));await api('/api/projects','POST',{projects:items});await render();dialog.close();},'primary'));
 }
 async function reviewView(){
-    const [drafts,setup]=await Promise.all([api("/api/review?limit=100&offset="+offsets.Review),api("/api/settings")]);
+    const [drafts,setup]=await Promise.all([api(reviewFocus?"/api/review?email_id="+reviewFocus:"/api/review?limit=100&offset="+offsets.Review),api("/api/settings")]);
     const root=el("div",{},title("Review queue"));
     if(!drafts.length)root.append(el("p",{},"No drafts awaiting review."));
     for(let draft of drafts){
@@ -225,7 +232,7 @@ async function reviewView(){
         syncActions();
         root.append(section);
     }
-    paginate(root,"Review",drafts);return root;
+    if(!reviewFocus)paginate(root,"Review",drafts);return root;
 }
 async function queueView(){
     const items=await api("/api/queue?limit=100&offset="+offsets.Queue);
@@ -309,9 +316,18 @@ async function settingsView(){
     return root;
 }
 async function jobsView(){
-    const jobs=await api("/api/jobs");
-    return el("div",{},title("Jobs",button("Refresh",render)),el("p",{class:"notice"},"Operations remain queued until the background worker is running. This view refreshes automatically."),
-        jobs.map(j=>card("#"+j.id+" · "+j.kind+" · "+j.status,j.kind==="send"&&["pending","running"].includes(j.status)?button(j.status==="pending"?"Cancel batch":"Stop remaining",async()=>{await api("/api/jobs/"+j.id+"/stop","POST",{});await render();toast("Stop requested. A message already being submitted cannot be recalled.");}):null,j.error?el("p",{class:"error"},j.error):null,j.result?.counts?el("p",{},Object.entries(j.result.counts).map(([name,count])=>name+": "+count).join(" · ")):null,el("details",{open:j.status==="failed"?"":undefined},el("summary",{},"Results"),el("pre",{},j.result?JSON.stringify(j.result,null,2):"No result yet")))));
+    const [jobs,worker]=await Promise.all([api('/api/jobs'),api('/api/worker')]);
+    const root=el('div',{},title('Jobs',button('Refresh',render)),card('Worker',el('p',{},worker.state+' | '+worker.stage),el('p',{},'Last seen: '+(worker.last_seen||'Never')+' | Last progress: '+(worker.last_progress||'None'))));
+    for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(!key.startsWith('outreach-intent:'))continue;const value=localStorage.getItem(key);root.append(card('Request outcome unknown',el('p',{},'Check whether this operation was recorded before trying it again.'),button('Check request',async()=>{const found=await api('/api/jobs/by-key/'+value);localStorage.removeItem(key);operationId=found.id;await render();})));}
+    for(const j of jobs){
+        const box=card('#'+j.id+' / '+j.kind+' / '+j.status,j.error?el('p',{class:'error',role:'alert'},j.error):null);
+        if(j.kind==='send'&&['pending','running'].includes(j.status))box.append(button(j.status==='pending'?'Cancel batch':'Stop remaining',async()=>{await api('/api/jobs/'+j.id+'/stop','POST',{});await render();}));
+        if(j.result?.id)box.append(button('Open draft',async()=>{reviewFocus=j.result.id;await navigate('Review');}));
+        if(j.result?.summary)box.append(table(['Message','Result','Reason','Action'],j.result.summary.map(r=>el('tr',{},cell('#'+r.id),cell(r.status),cell(r.reason||'',true),cell(['failed','canceled'].includes(r.status)?button('Return to review',async()=>{await api('/api/emails/'+r.id+'/retry','POST',{});await navigate('Review');}):r.status==='uncertain'?button('Resolve uncertain send',()=>navigate('Tracking')):null)))));
+        if(j.kind==='replies'&&j.result){box.append(el('p',{},'Scanned '+j.result.scanned+' | Remaining '+j.result.remaining+' | Skipped '+j.result.skipped));if(!j.result.complete)box.append(button('Continue scan',()=>queued('/api/check_replies')));}
+        box.append(el('details',{},el('summary',{},'Diagnostics'),el('pre',{},JSON.stringify(j.result||{},null,2))));root.append(box);
+    }
+    return root;
 }
 function paginate(root,name,items){
     const previous=button("Previous",async()=>{if(dirty.size&&!confirm("Leave without saving your draft edits?"))return;dirty.clear();offsets[name]=Math.max(0,offsets[name]-100);await render();});
@@ -336,7 +352,7 @@ async function loginScreen(){
 }
 async function boot(){
     const session=await api("/api/session");csrf=session.csrf;
-    nav.replaceChildren(...pages.map(page=>{const b=button(page,()=>navigate(page));b.setAttribute("aria-current",page===view?"page":"false");return b;}));
+    nav.replaceChildren(...pages.map(page=>{const b=button(page,()=>{reviewFocus=null;return navigate(page);});b.setAttribute("aria-current",page===view?"page":"false");return b;}));
     const logout=document.getElementById("logout");logout.hidden=!session.owner_mode;
     logout.onclick=async()=>{try{
         await Promise.allSettled([...pendingWrites]);
@@ -345,6 +361,8 @@ async function boot(){
     }catch(e){toast(e.message,true);}};
     if(!session.authenticated){await loginScreen();return;}
     loggedIn=true;
+    const recovered=await api('/api/jobs');
+    operationId=recovered.find(j=>['pending','running'].includes(j.status))?.id||null;
     await render();
 }
 window.addEventListener("beforeunload",event=>{if(dirty.size){event.preventDefault();event.returnValue="";}});

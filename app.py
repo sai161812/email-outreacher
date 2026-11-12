@@ -276,7 +276,13 @@ def create_app(overrides=None):
         SuppressionRepository.remove(canonical_email(data["email"]))
         return jsonify(success=True)
     @app.get("/api/review")
-    def review_list(): return jsonify(reviewer.list_pending(*page()))
+    def review_list():
+        if request.args.get('email_id'):
+            try: eid=ident(int(request.args['email_id']))
+            except ValueError: raise ValueError('Invalid email id')
+            from repository import JOINED
+            return jsonify(rows(JOINED+"WHERE e.id=? AND e.status='pending_review'",(eid,)))
+        return jsonify(reviewer.list_pending(*page()))
     @app.get("/api/queue")
     def queue(): return jsonify(EmailRepository.get_approved_queue(*page()))
     @app.post("/api/review/<int:eid>")
@@ -368,6 +374,12 @@ def create_app(overrides=None):
         return jsonify(jobs.enqueue("replies",{},request_key())),202
     @app.get("/api/jobs")
     def job_list(): return jsonify(jobs.list_jobs())
+    @app.get('/api/jobs/by-key/<key>')
+    def job_by_key(key):
+        if not re.fullmatch(r'[A-Za-z0-9_-]{8,128}',key): raise ValueError('Invalid request key')
+        return jsonify(jobs.by_key(key))
+    @app.get('/api/worker')
+    def worker_health(): return jsonify(jobs.health())
     @app.get("/api/jobs/<int:jid>")
     def job(jid): return jsonify(jobs.get(jid))
     @app.get("/api/attempts")

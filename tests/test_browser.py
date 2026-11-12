@@ -45,6 +45,23 @@ def browser_app(temp_db,monkeypatch):
 def open_view(page,name):
     page.get_by_role("navigation").get_by_role("button",name=name,exact=True).click()
 
+def test_lost_enqueue_response_recovers_one_job_and_reload(browser_app):
+    page,url,_,errors=browser_app
+    page.goto(url)
+    def lose_response(route):
+        response=route.fetch()
+        assert response.status==202
+        route.abort()
+    page.route('**/api/check_replies',lose_response)
+    page.get_by_role('button',name='Check replies',exact=True).click()
+    expect(page.get_by_text('Operation queued.',exact=False)).to_be_visible()
+    assert len(jobs.list_jobs())==1
+    page.reload()
+    expect(page.locator('#operation-status')).to_contain_text('Job #',timeout=10000)
+    open_view(page,'Jobs')
+    expect(page.get_by_role('heading',name='#1 / replies / pending',exact=True)).to_be_visible()
+    assert len(jobs.list_jobs())==1 and errors==[]
+
 
 def test_target_projects_manual_draft_and_evidence_review(browser_app,contact):
     import candidate_profile

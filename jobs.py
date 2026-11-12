@@ -2,6 +2,8 @@
 import json
 import logging
 import uuid
+import threading
+from contextlib import contextmanager
 from db import get_connection
 from errors import Conflict,NotFound,AppError
 from repository import timestamp,JOINED
@@ -51,6 +53,45 @@ def get(jid):
         row=conn.execute("SELECT * FROM jobs WHERE id=?",(jid,)).fetchone()
         if not row: raise NotFound("Job not found")
         return public(row)
+
+def by_key(key):
+    with get_connection() as conn:
+        row=conn.execute('SELECT * FROM jobs WHERE request_key=?',(key,)).fetchone()
+        if not row: raise NotFound('No job is recorded for this request yet; retry with the same request key')
+        return public(row)
+
+@contextmanager
+def heartbeat(jid):
+    stopped=threading.Event()
+    def beat():
+        while not stopped.wait(2):
+            try:
+                with get_connection() as conn:
+                    conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('worker_heartbeat',?)",(timestamp(),))
+            except Exception:
+                logging.error('heartbeat_failed job_id=%s',jid)
+    thread=threading.Thread(target=beat,daemon=True);thread.start()
+    try: yield
+    finally: stopped.set();thread.join(timeout=5)
+
+def health():
+    import config
+    from followups import parsed_time
+    from filelock import FileLock,Timeout
+    with get_connection() as conn:
+        beat=conn.execute("SELECT value FROM settings WHERE key='worker_heartbeat'").fetchone()
+        active=conn.execute("SELECT id,kind,updated_at,created_at FROM jobs WHERE status='running' ORDER BY id LIMIT 1").fetchone()
+    stage={'compose':'Generating draft','regenerate':'Regenerating draft','followup':'Generating follow-up','replies':'Scanning mailbox','send':'Processing send batch'}
+    state='not_started'
+    if beat:
+        age=max(0,(config.now()-parsed_time(beat['value'])).total_seconds())
+        state='busy' if active else 'idle'
+        if age>15:
+            try:
+                with FileLock(str(config.DB_PATH)+'.worker.lock',timeout=0): state='stopped'
+            except Timeout: state='suspected_stalled'
+    return {'state':state,'last_seen':beat['value'] if beat else None,'active_job':dict(active) if active else None,
+        'stage':stage.get(active['kind']) if active else 'Waiting for work','last_progress':active['updated_at'] if active else None}
 
 def list_jobs():
     with get_connection() as conn:
@@ -110,9 +151,11 @@ def process_next():
             return bool(conn.execute('SELECT 1 FROM settings WHERE key=?',(f"stop_job:{job['id']}",)).fetchone())
     progress.stop_requested=stop_requested
     try:
-        result=_dispatch(job["kind"],job["payload"],progress)
+        logging.info('job_started job_id=%s kind=%s',job['id'],job['kind'])
+        with heartbeat(job['id']): result=_dispatch(job["kind"],job["payload"],progress)
         with get_connection() as conn:
             conn.execute("UPDATE jobs SET status=?,result=?,updated_at=? WHERE id=?",('canceled' if stop_requested() else 'complete',json.dumps(result),timestamp(),job["id"]))
+        logging.info('job_finished job_id=%s kind=%s',job['id'],job['kind'])
     except Exception as exc:
         message=str(exc) if isinstance(exc,(AppError,ValueError)) else "Operation failed; check worker diagnostics"
         logging.error("job_failed job_id=%s kind=%s error_type=%s",job["id"],job["kind"],type(exc).__name__)
