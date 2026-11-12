@@ -127,12 +127,13 @@ def create_app(overrides=None):
     def stats(): return jsonify(summary=tracker.pipeline_summary(),stats=tracker.stats(),contact_funnel=tracker.contact_funnel())
     @app.get("/api/settings")
     def settings():
+        import account_checks
         candidate=candidate_profile.get_settings()
         readiness={"gemini":bool(config.GEMINI_API_KEY),"gmail":bool(config.GMAIL_ADDRESS and config.GMAIL_APP_PASSWORD),
                    "profile":bool(candidate["profile"]),"context":bool(candidate["candidate_context"].strip())}
         return jsonify(**candidate,
             resumes=resume.list_resume_variants(),suppressions=SuppressionRepository.get_all(),readiness=readiness,
-            connection_verification={"gemini":"not_verified","smtp":"not_verified","imap":"not_verified"},
+            connection_verification={"gemini":"not_verified",**account_checks.saved_status()},
             configuration={"sender":config.GMAIL_ADDRESS,"model":config.GEMINI_MODEL,"timezone":config.TIMEZONE_NAME,"daily_cap":config.DAILY_SEND_CAP,
                            "company_weekly_cap":config.MAX_PER_COMPANY_PER_WEEK,"resume_mode":config.RESUME_ATTACH_MODE,
                            "daily_remaining":max(0,config.DAILY_SEND_CAP-EmailRepository.count_sends_today()-rows("SELECT COUNT(*) n FROM send_attempts a JOIN emails e ON e.id=a.email_id WHERE a.state IN ('reserved','submitting','uncertain') AND e.sent_at IS NULL")[0]["n"])},
@@ -151,6 +152,10 @@ def create_app(overrides=None):
             if not conn.execute('DELETE FROM settings WHERE key=?',(data['key'],)).rowcount: raise NotFound('Report not found')
             event(conn,None,'reply_report_reviewed',{'key':data['key']})
         return jsonify(success=True)
+    @app.post('/api/check-accounts')
+    def check_accounts():
+        payload(set())
+        return jsonify(jobs.enqueue('diagnostics',{},request_key())),202
     @app.post("/api/settings")
     def save_settings():
         data=payload({"profile","candidate_context"})

@@ -8,7 +8,7 @@ from db import get_connection
 from errors import Conflict,NotFound,AppError
 from repository import timestamp,JOINED
 
-KINDS={"compose","followup","regenerate","send","replies"}
+KINDS={"compose","followup","regenerate","send","replies","diagnostics"}
 
 def public(row):
     item=dict(row)
@@ -121,6 +121,9 @@ def send_plan():
         'projected_eligible':sum(r['status']=='dry_run' for r in preflight)}
 
 def _dispatch(kind,payload,progress):
+    if kind=='diagnostics':
+        from account_checks import check_and_save
+        return check_and_save()
     if kind=="send":
         import sender
         if 'members' not in payload: raise Conflict('Legacy batch has no fixed recipients; queue a new reviewed batch')

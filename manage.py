@@ -1,4 +1,4 @@
-"""Local database operations; never sends mail or calls AI."""
+"""Database operations and explicitly invoked account checks; never sends mail."""
 import argparse
 import json
 import sqlite3
@@ -24,6 +24,8 @@ def main():
     commands.add_parser("init",help="Initialize or upgrade, backing up an existing database first")
     commands.add_parser("check",help="Check integrity and report legacy issues without exposing records")
     commands.add_parser("diagnose",help="Report runtime, paths and configuration presence without network calls")
+    commands.add_parser('check-accounts',help='Explicit SMTP/IMAP login and readonly mailbox check; never submits mail')
+    commands.add_parser('check-model',help='Explicit PAID synthetic draft check: at most three model calls plus search charges; never saved/sent')
     backup=commands.add_parser("backup",help="Create an SQLite-consistent backup, including committed WAL data")
     backup.add_argument("--output",help="New backup filename; an existing file is never overwritten")
     backup.add_argument("--bundle",help="New directory containing database, resume assets and manifest")
@@ -41,6 +43,12 @@ def main():
         elif args.command=="diagnose":
             from operations import diagnostics
             print(json.dumps(diagnostics(),indent=2))
+        elif args.command=='check-accounts':
+            from account_checks import check_mail
+            print(json.dumps(check_mail(),indent=2))
+        elif args.command=='check-model':
+            from account_checks import check_model
+            print(json.dumps(check_model(),indent=2))
         elif args.command=="restore":
             from operations import restore_bundle
             print(restore_bundle(args.bundle,args.output,args.resume_output))

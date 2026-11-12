@@ -297,7 +297,7 @@ function resumeForm(resume,refresh){
 async function settingsView(){
     const setup=await api("/api/settings");settingsCache=setup;
     const readiness=el("p",{},Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"configured":"needed")).join(" · "));
-    const root=el("div",{},title("Settings"),card("Readiness",readiness,el("p",{class:"muted"},"Provider connections have not been verified. Configuration presence alone does not establish account access."),
+    const root=el("div",{},title("Settings"),card("Readiness",readiness,el("p",{class:"muted"},"Connection checks: SMTP "+setup.connection_verification.smtp+"; IMAP "+setup.connection_verification.imap+". Last check: "+(setup.connection_verification.checked_at||"never")+". Recheck after credential changes; configuration presence alone does not establish account access."),button("Check mail connections (no sending)",()=>queued("/api/check-accounts")),
         el("p",{class:"muted"},"Model: "+setup.configuration.model+" · Timezone: "+setup.configuration.timezone+" · Resume mode: "+setup.configuration.resume_mode)));
     const fields={};for(const key of ["full_name","email","phone","linkedin_url","github_url","portfolio_url"])fields[key]=input(setup.profile?.[key],key.includes("url")?"url":key==="email"?"email":"text");
     const context=el("textarea",{value:setup.candidate_context,rows:6});
@@ -352,6 +352,7 @@ async function jobsView(){
         if(j.kind==='send'&&['pending','running'].includes(j.status))box.append(button(j.status==='pending'?'Cancel batch':'Stop remaining',async()=>{await api('/api/jobs/'+j.id+'/stop','POST',{});await render();}));
         if(j.result?.id)box.append(button('Open draft',async()=>{reviewFocus=j.result.id;await navigate('Review');}));
         if(j.result?.summary)box.append(table(['Message','Result','Reason','Action'],j.result.summary.map(r=>el('tr',{},cell('#'+r.id),cell(r.status),cell(r.reason||'',true),cell(['failed','canceled'].includes(r.status)?button('Return to review',async()=>{await api('/api/emails/'+r.id+'/retry','POST',{});await navigate('Review');}):r.status==='uncertain'?button('Resolve uncertain send',()=>navigate('Tracking')):null)))));
+        if(j.kind==='diagnostics'&&j.result)box.append(el('p',{},'SMTP: '+j.result.smtp.status+' | IMAP: '+j.result.imap.status));
         if(j.kind==='replies'&&j.result){box.append(el('p',{},'Scanned '+j.result.scanned+' | Remaining '+j.result.remaining+' | Skipped '+j.result.skipped));if(!j.result.complete)box.append(button('Continue scan',()=>queued('/api/check_replies')));}
         box.append(el('details',{},el('summary',{},'Diagnostics'),el('pre',{},JSON.stringify(j.result||{},null,2))));root.append(box);
     }
