@@ -1,0 +1,82 @@
+{
+  "application_commit": "3b034536047cba20b06c315947fc4287182e1c0f",
+  "scope": ["R16", "R17"],
+  "status": "software_implemented_live_acceptance_pending",
+  "implementation_commits": ["564edbb", "c56391f", "3b03453"],
+  "regression": {
+    "passed": 303,
+    "failed": 0,
+    "chromium_cases": 20,
+    "additional_loopback_launcher_case": 1,
+    "duration_seconds": 113.20,
+    "command": "python -m pytest -q -p no:cacheprovider --junitxml=test-results/milestone5-final.xml"
+  },
+  "source_and_javascript_checks": "passed",
+  "dependency_compatibility": "passed",
+  "dependency_advisories": {
+    "result": "no known vulnerabilities found",
+    "locked_runtime_dependencies": 38,
+    "installed_runtime_and_development_dependencies": 67,
+    "installed_packages_skipped": 0,
+    "date": "2026-11-12"
+  },
+  "committed_release": {
+    "path": "dist/email-outreacher-3b034536047c.zip",
+    "sha256": "7d26adcb23a22a99141465e2a222bddae3eea5a9ea31d83752b8b7a1372cc3a0",
+    "clean_runtime_smoke": "passed",
+    "source_only_privacy_policy": "passed"
+  },
+  "consistent_copy_and_bundle_restore": {
+    "schema_version": 7,
+    "integrity": "ok",
+    "foreign_key_violations": 0,
+    "row_counts_preserved": true,
+    "submitted_history_and_inputs_preserved": true,
+    "stored_asset_files_preserved": 2,
+    "actual_assets_valid_for_live_use": false,
+    "readable_synthetic_asset_restore_regressions": "passed",
+    "live_database_modified_by_rehearsal": false
+  },
+  "reachable_history_at_application_commit": {
+    "refs": 8,
+    "unique_blobs_scanned": 494,
+    "known_credential_shape_candidates": 0,
+    "large_blobs_skipped": 0,
+    "historical_private_context_paths": 2,
+    "limitation": "Shape scan is not a credential guarantee; historical private context needs owner privacy review before portfolio publication.",
+    "history_rewritten": false
+  },
+  "local_inventory_at_review": {
+    "dist_files": 14,
+    "release_files": 1,
+    "backup_files": 73,
+    "virtual_environments": [".venv", ".venv-m1", ".venv-preserved-milestone1", "venv"],
+    "active_environment": ".venv",
+    "cleanup_performed": false
+  },
+  "R16": {
+    "non_sending_diagnostics": "implemented_and_fake_provider_verified",
+    "smtp_actual_status": "not_configured",
+    "imap_actual_status": "not_configured",
+    "model_actual_status": "not_configured",
+    "verified_candidate_facts_saved": false,
+    "usable_actual_resume_or_reviewed_no_resume": false,
+    "owner_designated_test_recipient": false,
+    "exact_test_message_reviewed_and_send_authorized": false,
+    "actual_receipt_authentication_attachment_thread_and_reply": "not_exercised",
+    "acceptance": "pending",
+    "guide": "docs/LIVE_ACCEPTANCE.md"
+  },
+  "R17_local_release_and_recovery_acceptance": "passed",
+  "remote_ci": {
+    "url": "https://github.com/sai161812/email-outreacher/actions/runs/43275806808",
+    "source_sha": "3b034536047cba20b06c315947fc4287182e1c0f",
+    "conclusion": "success",
+    "ubuntu": "success",
+    "windows": "success"
+  },
+  "R11_live_and_human_acceptance": "still pending in Milestone 3 per owner decision",
+  "paid_model_requests": 0,
+  "live_emails_sent": 0,
+  "overall_plan_complete": false
+}

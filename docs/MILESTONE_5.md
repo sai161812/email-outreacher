@@ -56,6 +56,46 @@ skipped. Two historical private context paths remain reachable; history review
 and clean source release privacy are distinguished. No cleanup, history rewriting,
 force-push, credential probing or unrelated fix.py/rewrite.py execution occurred.
 
-The final exact-commit suite, package, advisory and restore evidence is recorded
-below after the final gates. Tests use synthetic providers/temp data. The full
-software regression suite does not substitute for the remaining R16 live steps.
+**Final local verification — 12 November 2026**
+
+Application source `3b034536047cba20b06c315947fc4287182e1c0f` includes the diagnostic
+and launcher implementation commits `564edbb` and `c56391f`. Verification-only
+documentation follows that source commit. Machine-readable results are in
+[milestone5_verification.json](audit/2026-11-12/milestone5_verification.json).
+
+- Full suite: `python -m pytest -q -p no:cacheprovider
+  --junitxml=test-results/milestone5-final.xml` — **303 passed in 113.20 seconds**,
+  including 20 Chromium workflows and a separate loopback launcher lifecycle case.
+  New coverage verifies non-sending diagnostics, safe failures/configuration
+  scope, visible Settings/Jobs results, startup/port/duplicate protection, parent
+  pipe closure and stop/restart of a submitting attempt as uncertain with one
+  retained attempt. Existing migration, readable synthetic PDF restore, review,
+  bounded generation, delivery and reply regressions also pass.
+- `scripts/check_source.py`, JavaScript syntax and `git diff --check` pass.
+  `pip check` passes. Both the 38 locked runtime dependencies and the entire
+  installed development/runtime environment report no known vulnerabilities
+  under the current `pip_audit` checks. This is time-specific advisory evidence.
+- Both Windows and Linux CI passed every gate for this exact source in
+  [run 43275806808](https://github.com/sai161812/email-outreacher/actions/runs/43275806808),
+  including regression/browser tests, installed dependency advisories, source
+  packaging and clean-release runtime installation.
+- Exact release: `dist/email-outreacher-3b034536047c.zip`, SHA-256
+  `7d26adcb23a22a99141465e2a222bddae3eea5a9ea31d83752b8b7a1372cc3a0`.
+  `scripts/smoke_release.py` created a new environment, installed hashed runtime
+  dependencies, checked Waitress routes, schema 7 integrity, one worker iteration,
+  backup, launcher status and zero-call unconfigured account/model diagnostics.
+- A consistent copy of the actual database was initialized and bundled/restored
+  into new paths: schema 7, integrity `ok`, zero foreign-key violations, unchanged
+  company/contact/email/resume/opportunity counts and submitted message history/
+  generation inputs. Both stored files were preserved byte-for-byte; preservation
+  does not make these existing placeholders valid resumes. The live database was
+  not changed by the rehearsal. Private evidence stays in ignored backups.
+- Final reachable-history review: **8 refs, 494 unique blobs, zero known
+  credential-shape candidates, zero oversized blobs skipped**. Two historical
+  private context paths remain reachable. Inventory: 14 dist files, one release
+  file and 73 backup files; four virtual environments retained. The exact source
+  ZIP above is the current tested release. No files or history were removed.
+
+Tests use synthetic providers/temp data and cannot substitute for the remaining
+R16 live steps. No paid model requests or live email submissions occurred.
+**R17 local acceptance passes; R16 live acceptance remains pending.**

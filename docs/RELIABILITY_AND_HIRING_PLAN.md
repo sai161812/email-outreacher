@@ -15,6 +15,13 @@ it has not been moved to Milestone 5 or counted as passing.
 Milestone 4 / R12–R15 is complete: [MILESTONE_4.md](MILESTONE_4.md) records
 293 passing tests, schema 7 migration/restore, responsive workflow verification
 and exact committed-release acceptance. R11's pending status is unchanged.
+Milestone 5 software is implemented: [MILESTONE_5.md](MILESTONE_5.md) is the
+current verification record for 303 passing tests, clean release installation,
+restore, diagnostics and upkeep. R17's local release/recovery gates pass; R16's
+live acceptance remains pending verified owner facts, an actual resume or
+deliberate No resume choice, account access and a separately authorized controlled
+message/receipt/reply check. Milestone 5 and the overall plan are **not fully
+accepted**. R11 remains pending in Milestone 3.
 The findings below preserve the pre-implementation review baseline.
 
 **Decision:** keep Flask, SQLite, the single worker, Gmail SMTP/IMAP, Gemini and the current browser UI. The project has a useful foundation. Finish operational setup, close the remaining delivery/recovery gaps, then improve how the candidate demonstrates fit. A rewrite would increase risk without improving the intended workflow.
@@ -46,7 +53,7 @@ The previous A01–A52 audit remains historical evidence. This plan records curr
 | 2. Delivery and reply correctness | R03–R08 | Complete: uncertain recovery, fixed batches, sender identity, retained replies, fresh scans and rejection policy verified |
 | 3. Useful, truthful outreach | R09–R11 | R09/R10 complete; evaluation tooling implemented; R11 live-output/human acceptance pending |
 | 4. Finish everyday workflows | R12–R15 | Complete: recoverable jobs, resume versions/preview, protected forms, audited outcomes and unique-person funnel |
-| 5. Release and account acceptance | R16–R17 | Personal resume/facts setup, clean release/restore gates and separately authorized controlled live acceptance |
+| 5. Release and account acceptance | R16–R17 | Software and local release/recovery checks pass; R16 personal setup and controlled live acceptance remain pending; see the current verification record |
 
 P0 means release-blocking reliability or setup work. P1 means required for the intended complete product. P2 means a useful finishing step after correctness. Keep each change small enough to review and revert; linked schema/service/UI changes belong together.
 

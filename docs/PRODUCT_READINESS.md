@@ -1,5 +1,34 @@
 # Product acceptance and startup
 
+The current verification record is [Milestone 5](MILESTONE_5.md), with structured
+results in [milestone5_verification.json](audit/2026-11-12/milestone5_verification.json).
+Application source **3b034536047c** passed **303 tests**, including 20 Chromium
+cases, on 12 November 2026. The exact committed archive installed cleanly; source,
+dependency, worker recovery, schema 7 and backup/asset restore checks pass.
+
+Milestone 5 software is implemented. **R16 live acceptance is pending**, so neither
+Milestone 5 nor the overall plan is fully accepted. Gmail/Gemini are unconfigured,
+verified facts are not saved and the two active resume files are unusable
+placeholders. Supply an actual resume or deliberately select No resume, review
+and save facts, then follow [live acceptance](LIVE_ACCEPTANCE.md) for the separately
+authorized recipient/message and real receipt/authentication/thread/reply checks.
+R11 live-provider/human quality acceptance remains pending in Milestone 3.
+No live messages or paid model requests were made during this milestone.
+
+For current installation, use the [README](../README.md); for start/status/stop,
+private logs, upgrades, backup/restore and maintenance, use [OPERATIONS.md](OPERATIONS.md).
+After installation, `run.py start` starts the server and worker; `run.py stop`
+or Ctrl+C stops them with conservative uncertain-delivery recovery on restart.
+Connection diagnostics verify access only; they do not establish delivery or
+reply-scan freshness. Historical private context remains reachable in Git history;
+review that exposure before presenting the repository publicly.
+
+## Historical verification and startup notes
+
+The records below preserve earlier results and setup observations. Use the current
+verification and operation links above for the present checkout; earlier data,
+duplicate, migration and asset descriptions are not new acceptance claims.
+
 Current Milestone 4 application source **ea80456** passed **293 automated tests**,
 including 19 Chromium cases, clean committed-release installation and schema 7
 migration/restore checks on 12 November 2026. See [Milestone 4 evidence](MILESTONE_4.md).
