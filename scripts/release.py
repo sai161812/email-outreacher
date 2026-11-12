@@ -13,7 +13,7 @@ def prohibited(name):
         or leaf.startswith(".env.") and leaf!=".env.example"
         or leaf.endswith((".db",".sqlite",".pdf",".zip",".pem",".key"))
         or any(token in leaf for token in (".db-",".sqlite-"))
-        or any(part in {".git",".venv","venv",".python",".runtime-cache","backups","__pycache__","test-results"} or part.startswith('.venv-') for part in path.parts)
+        or any(part in {".git",".venv","venv",".python",".runtime-cache",".runtime","backups","__pycache__","test-results"} or part.startswith('.venv-') for part in path.parts)
     )
 
 def source_files():

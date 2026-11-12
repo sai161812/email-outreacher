@@ -8,6 +8,8 @@ import db
 import jobs
 
 def main():
+    from parent_watch import watch_parent
+    watch_parent()
     parser=argparse.ArgumentParser()
     parser.add_argument("--once",action="store_true",help="Process at most one pending job and exit")
     args=parser.parse_args()
