@@ -34,6 +34,7 @@ def test_authentication_errors_are_redacted_and_clients_close(monkeypatch):
     smtp.quit.assert_called_once();imap.logout.assert_called_once()
 
 def test_saved_results_are_scoped_to_account(temp_db,monkeypatch):
+    monkeypatch.setattr(config,'GMAIL_ADDRESS','owner@example.test');monkeypatch.setattr(config,'GMAIL_APP_PASSWORD','synthetic-password')
     monkeypatch.setattr(account_checks,'check_mail',lambda:{'scope':account_checks.scope(),'checked_at':'2026-11-12','smtp':{'status':'verified'},'imap':{'status':'verified'}})
     account_checks.check_and_save()
     assert account_checks.saved_status()['smtp']=='verified'

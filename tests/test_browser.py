@@ -48,6 +48,21 @@ def browser_app(temp_db,monkeypatch,request):
 def open_view(page,name):
     page.get_by_role("navigation").get_by_role("button",name=name,exact=True).click()
 
+def test_explicit_account_check_displays_result_without_sending(browser_app,monkeypatch):
+    import account_checks
+    monkeypatch.setattr(account_checks,'check_mail',lambda:{'scope':account_checks.scope(),'checked_at':'2026-11-12T00:00:00+00:00','smtp':{'status':'verified'},'imap':{'status':'verified'}})
+    page,url,smtp,errors=browser_app
+    page.goto(url);open_view(page,'Settings')
+    page.get_by_role('button',name='Check mail connections (no sending)',exact=True).click()
+    expect(page.get_by_text('Operation queued.',exact=False)).to_be_visible()
+    assert jobs.process_next()
+    open_view(page,'Jobs')
+    expect(page.get_by_text('SMTP: verified | IMAP: verified',exact=True)).to_be_visible()
+    open_view(page,'Settings')
+    expect(page.get_by_text('Connection checks: SMTP verified; IMAP verified.',exact=False)).to_be_visible()
+    smtp.sendmail.assert_not_called()
+    assert errors==[]
+
 @pytest.mark.parametrize('browser_app',[True],indirect=True)
 def test_expired_owner_session_preserves_unsaved_fields_after_login(browser_app):
     page,url,_,errors=browser_app

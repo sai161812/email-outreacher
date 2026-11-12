@@ -20,14 +20,14 @@ def state_path(database):
 
 def control(path,action):
     if not path.is_file(): return {'status':'not_running'}
-    state=json.loads(path.read_text(encoding='utf8'))
     try:
+        state=json.loads(path.read_text(encoding='utf8'))
         with socket.create_connection(('127.0.0.1',state['control_port']),timeout=3) as sock:
             sock.settimeout(3)
             sock.sendall((json.dumps({'token':state['token'],'action':action})+'\n').encode())
             response=sock.makefile('rb').readline(4096)
         return json.loads(response)
-    except (OSError,ValueError): return {'status':'not_running','note':'No authenticated supervisor response; no process was killed.'}
+    except (OSError,ValueError,KeyError): return {'status':'not_running','note':'No authenticated supervisor response; no process was killed.'}
 
 def start(database,port):
     from filelock import FileLock,Timeout
@@ -68,7 +68,9 @@ def start(database,port):
         else: raise ValueError('Unreadable server readiness record')
         if actual['instance']!=run_id: raise ValueError('Server readiness did not match this launcher instance')
         worker=launch('worker',['worker.py'])
-        state.write_text(json.dumps({'token':token,'control_port':listener.getsockname()[1],'port':port}),encoding='utf8')
+        temporary_state=state.parent/(run_id+'.state')
+        temporary_state.write_text(json.dumps({'token':token,'control_port':listener.getsockname()[1],'port':port}),encoding='utf8')
+        temporary_state.replace(state)
         def listen():
             while not stopped.is_set():
                 try: client,_=listener.accept()

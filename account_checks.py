@@ -57,6 +57,8 @@ def check_mail():
     return report
 
 def saved_status():
+    if not config.GMAIL_ADDRESS or not config.GMAIL_APP_PASSWORD:
+        return {'smtp':'not_configured','imap':'not_configured'}
     from repository import one
     row=one("SELECT value FROM settings WHERE key='mail_connection_check'")
     if not row: return {'smtp':'not_verified','imap':'not_verified'}

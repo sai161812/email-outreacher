@@ -12,6 +12,7 @@ def prohibited(name):
         leaf in {"context.txt","candidate_context.txt","fix.py","rewrite.py",".env"}
         or leaf.startswith(".env.") and leaf!=".env.example"
         or leaf.endswith((".db",".sqlite",".pdf",".zip",".pem",".key"))
+        or leaf.endswith(('.worker.lock','.schema.lock','.launcher.lock'))
         or any(token in leaf for token in (".db-",".sqlite-"))
         or any(part in {".git",".venv","venv",".python",".runtime-cache",".runtime","backups","__pycache__","test-results"} or part.startswith('.venv-') for part in path.parts)
     )

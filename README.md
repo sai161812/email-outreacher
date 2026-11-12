@@ -2,6 +2,22 @@
 
 A single-owner Flask dashboard for manual contact management, Gemini-assisted drafting, explicit review, Gmail SMTP delivery, and reply tracking. Python **3.12** is supported. The app defaults to loopback access and never schedules sending automatically.
 
+After locked installation, start both local processes with
+`.venv/Scripts/python.exe run.py start` (Windows) or `.venv/bin/python run.py start`
+(Linux/macOS). Use `run.py status` or `run.py stop` from another terminal; Ctrl+C
+also stops the owned children. `--port 5001` selects another web port. Windows has
+an optional `start.ps1` wrapper. See [local operation and recovery](docs/OPERATIONS.md)
+for logs, conflict handling, releases and the maintenance checklist.
+
+Account verification is explicit: `manage.py check-accounts` authenticates SMTP/
+IMAP without sending, while `manage.py check-model` is a separately invoked paid
+synthetic draft check with at most three generation calls plus search charges.
+Neither check sends email. [Live acceptance](docs/LIVE_ACCEPTANCE.md) must still
+record a reviewed, owner-authorized message to an owner-designated recipient,
+actual receipt/authentication/assets and a real matched reply. Missing account
+setup is never counted as passing. Milestone 5 implementation/verification status
+is recorded in [MILESTONE_5.md](docs/MILESTONE_5.md).
+
 See [product acceptance and startup](docs/PRODUCT_READINESS.md) for the tested workflow scope and remaining account setup. If you previously used the UI-only preview, start fresh terminals so preview path overrides do not carry into normal operation.
 
 ## Install and start

@@ -6,6 +6,8 @@ import subprocess
 import sys
 import time
 import urllib.request
+import sqlite3
+from contextlib import closing
 import pytest
 import run
 
@@ -39,10 +41,27 @@ def test_launcher_start_status_stop_and_duplicate_guard(tmp_path):
                 assert response.status==200
             duplicate=subprocess.run([sys.executable,'run.py','start','--port',str(port)],cwd=ROOT,env=env,capture_output=True,text=True,timeout=10)
             assert duplicate.returncode!=0 and 'already owns' in duplicate.stderr
+            with closing(sqlite3.connect(env['OUTREACH_DB_PATH'])) as conn,conn:
+                conn.execute("INSERT INTO companies(id,name) VALUES (1,'Synthetic acceptance')")
+                conn.execute("INSERT INTO contacts(id,company_id,email) VALUES (1,1,'recipient@example.test')")
+                conn.execute("INSERT INTO emails(id,company_id,contact_id,subject,body,status,message_id) VALUES (1,1,1,'S','Synthetic body','sending','<uncertain@test>')")
+                conn.execute("INSERT INTO send_attempts(email_id,company_id,recipient,message_id,state,created_at,updated_at) VALUES (1,1,'recipient@example.test','<uncertain@test>','submitting','2026-11-12T00:00:00+00:00','2026-11-12T00:00:00+00:00')")
             assert run.control(state,'stop')['status']=='stopping'
             assert process.wait(timeout=15)==0
             assert run.control(state,'status')['status']=='not_running'
             with socket.socket() as probe: probe.bind(('127.0.0.1',port))
+            process=subprocess.Popen([sys.executable,'run.py','start','--port',str(port)],cwd=ROOT,env=env,stdout=log,stderr=log,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+            deadline=time.monotonic()+20
+            while time.monotonic()<deadline:
+                with closing(sqlite3.connect(env['OUTREACH_DB_PATH'])) as conn:
+                    status=conn.execute('SELECT state FROM send_attempts').fetchone()[0]
+                if status=='uncertain': break
+                time.sleep(.1)
+            assert status=='uncertain'
+            with closing(sqlite3.connect(env['OUTREACH_DB_PATH'])) as conn:
+                assert conn.execute('SELECT status FROM emails').fetchone()[0]=='uncertain'
+                assert conn.execute('SELECT count(*) FROM send_attempts').fetchone()[0]==1
         finally:
             run.control(state,'stop')
             if process.poll() is None:

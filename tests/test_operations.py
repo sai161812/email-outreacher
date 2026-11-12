@@ -25,7 +25,7 @@ def test_release_path_policy():
     path=Path(__file__).resolve().parents[1]/"scripts"/"release.py"
     spec=importlib.util.spec_from_file_location("source_release",path)
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    for name in [".env",".env.production","outreach.db-wal","resumes/private.pdf","context.txt","rewrite.py"]:
+    for name in [".env",".env.production","outreach.db-wal","resumes/private.pdf","context.txt","rewrite.py",'.runtime/private-token.json','outreach.db.launcher.lock']:
         assert module.prohibited(name)
     for name in [".env.example","candidate_context.example.txt","tests/test_sender.py","static/app.js"]:
         assert not module.prohibited(name)

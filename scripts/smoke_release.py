@@ -27,6 +27,7 @@ def smoke(archive):
         for line in (project/".env.example").read_text(encoding="utf8").splitlines():
             if line and not line.startswith("#") and "=" in line: env.pop(line.split("=",1)[0],None)
         env.pop("PYTHONPATH",None)
+        env.pop('OUTREACH_MANAGED_CHILD',None)
         env.update(OUTREACH_DB_PATH=str(base/"smoke.db"),CONTEXT_PATH=str(base/"facts.txt"),RESUME_DIR=str(base/"resumes"),
                    GEMINI_API_KEY="",GMAIL_ADDRESS="",GMAIL_APP_PASSWORD="",OWNER_PASSWORD="",SECRET_KEY="",ALLOWED_HOSTS="localhost,127.0.0.1,::1",COOKIE_SECURE="0")
         def run(*args):
@@ -34,6 +35,9 @@ def smoke(archive):
         run("manage.py","init")
         run("manage.py","check")
         run("worker.py","--once")
+        run('run.py','status')
+        run('manage.py','check-accounts')
+        run('manage.py','check-model')
         run("manage.py","backup","--output",str(base/"snapshot.sqlite"))
         probe=r'''
 import json,threading,urllib.request
