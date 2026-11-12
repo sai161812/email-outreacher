@@ -73,12 +73,41 @@ def list_resume_variants():
     return ResumeRepository.get_all()
 
 def pick_best_variant(job_text):
-    variants = list_resume_variants()
+    variants=[]
+    for variant in list_resume_variants():
+        try: delivery_asset(variant['id'])
+        except (ValueError,OSError): continue
+        variants.append(variant)
     if not variants:
         return None
     text = (job_text or "").casefold()
-    return max(variants,key=lambda v: sum(bool(re.search(r"(?<!\w)"+re.escape(k.strip().casefold())+r"(?!\w)",text))
-                                            for k in v["keywords"].split(",") if k.strip()))
+    return max(variants,key=lambda v: matching_score(v,text))
+
+def matching_score(variant,text):
+    return sum(bool(re.search(r'(?<!\w)'+re.escape(k.strip().casefold())+r'(?!\w)',(text or '').casefold())) for k in variant['keywords'].split(',') if k.strip())
+
+def revise(variant_id,changes,file_path=None,archive=False):
+    from db import get_connection
+    from repository import timestamp,event
+    from errors import Conflict
+    old=get_variant(variant_id)
+    if set(changes)-{'name','keywords','resume_url'}: raise ValueError('Invalid resume changes')
+    values={**old,**changes}
+    if not isinstance(values['name'],str) or not values['name'].strip() or len(values['name'])>100: raise ValueError('Resume name is required (at most 100 characters)')
+    if not isinstance(values['keywords'],str) or len(values['keywords'])>1000: raise ValueError('Invalid keywords')
+    values['resume_url']=safe_url(values.get('resume_url'))
+    if file_path: values['file_path']=str(checked_pdf(file_path)[0])
+    with get_connection(immediate=True) as conn:
+        if not conn.execute('SELECT 1 FROM resume_variants WHERE id=? AND archived=0',(variant_id,)).fetchone(): raise Conflict('Resume already changed; reload')
+        if conn.execute("SELECT 1 FROM emails WHERE resume_variant_id=? AND status IN ('sending','uncertain')",(variant_id,)).fetchone(): raise Conflict('Resolve in-flight delivery before changing this resume')
+        new_id=None
+        if not archive:
+            new_id=conn.execute('INSERT INTO resume_variants(name,keywords,file_path,resume_url) VALUES (?,?,?,?)',(values['name'].strip(),values['keywords'],values['file_path'],values['resume_url'])).lastrowid
+        conn.execute('UPDATE resume_variants SET archived=1 WHERE id=?',(variant_id,))
+        affected=conn.execute("SELECT id FROM emails WHERE resume_variant_id=? AND status IN ('pending_review','approved')",(variant_id,)).fetchall()
+        conn.execute("UPDATE emails SET resume_variant_id=?,status='pending_review',approval_json=NULL,evidence_verified_at=NULL,revision=revision+1,updated_at=? WHERE resume_variant_id=? AND status IN ('pending_review','approved')",(variant_id if archive else new_id,timestamp(),variant_id))
+        for row in affected: event(conn,row['id'],'resume_changed',{'previous_variant':variant_id,'replacement_variant':new_id})
+    return new_id
 
 def delivery_asset(variant_id):
     if not variant_id:

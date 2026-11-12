@@ -38,7 +38,7 @@ def pipeline_summary():
     return result
 
 def stats():
-    variants={r["id"]:r["name"] for r in ResumeRepository.get_all()}
+    variants={r["id"]:r["name"] for r in rows('SELECT id,name FROM resume_variants')}
     metrics={}
     weekdays={d:{"sent":0,"replied":0,"interviews":0,"offers":0} for d in ("Mon","Tue","Wed","Thu","Fri","Sat","Sun")}
     for row in rows("""SELECT e.*,EXISTS(SELECT 1 FROM events v WHERE v.email_id=e.id

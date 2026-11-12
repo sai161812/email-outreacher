@@ -171,6 +171,8 @@ def create_app(overrides=None):
         return jsonify(candidate_context=content,source="context.txt")
     @app.get("/api/companies")
     def companies(): return jsonify(contacts.list_companies(*page(),request.args.get("search","")[:200]))
+    @app.get('/api/companies/<int:cid>')
+    def company_details(cid): return jsonify(contacts.get_company(cid))
     @app.get('/api/projects')
     def projects_list():
         import opportunities
@@ -260,9 +262,38 @@ def create_app(overrides=None):
         return jsonify(id=rid),201
     @app.get("/api/resumes/<int:rid>/pdf")
     def resume_pdf(rid):
-        variant=resume.get_variant(rid)
+        variant=rows('SELECT * FROM resume_variants WHERE id=?',(rid,))
+        if not variant: raise NotFound('Resume not found')
+        variant=variant[0]
         path,_=resume.checked_pdf(variant["file_path"])
         return send_from_directory(path.parent,path.name,mimetype="application/pdf",as_attachment=True,download_name="resume.pdf")
+    @app.patch('/api/resumes/<int:rid>')
+    def edit_resume(rid):
+        return jsonify(id=resume.revise(rid,payload({'name','keywords','resume_url'})))
+    @app.post('/api/resumes/<int:rid>/replace')
+    def replace_resume(rid):
+        upload=request.files.get('file')
+        if not upload: raise ValueError('Upload a replacement PDF')
+        content=upload.stream.read(config.MAX_RESUME_BYTES+1);resume.validate_pdf(content)
+        config.RESUME_DIR.mkdir(parents=True,exist_ok=True)
+        target=config.RESUME_DIR/(uuid.uuid4().hex+'.pdf');target.write_bytes(content)
+        try: new_id=resume.revise(rid,{k:request.form[k] for k in ('name','keywords','resume_url') if k in request.form},str(target))
+        except Exception: target.unlink(missing_ok=True);raise
+        return jsonify(id=new_id)
+    @app.delete('/api/resumes/<int:rid>')
+    def archive_resume(rid):
+        payload(set());resume.revise(rid,{},archive=True)
+        return jsonify(success=True)
+    @app.get('/api/review/<int:eid>/preview')
+    def preview_message(eid):
+        from repository import snapshot
+        import sender
+        with db.get_connection() as conn:
+            row=require_email(conn,eid)
+            if row['sent_at']: raise Conflict('Use the sent record for submitted mail')
+            current=snapshot(conn,row)
+        message=sender.build_message(current['recipient'],current['subject'],current['body'],company_name=current['company_name'],attach_mode=current['attach_mode'],asset=current['resume'])
+        return jsonify(sender=str(message['From']),recipient=str(message['To']),subject=str(message['Subject']),body=message.get_body(preferencelist=('plain',)).get_content(),attachments=[p.get_filename() for p in message.iter_attachments()],revision=row['revision'])
     @app.post("/api/suppressions")
     def suppress():
         from validate import canonical_email
@@ -326,6 +357,8 @@ def create_app(overrides=None):
         if "resume_variant_id" not in data:
             selected=resume.pick_best_variant(company.get("job_text"))
             data["resume_variant_id"]=selected["id"] if selected else None
+            if selected and resume.matching_score(selected,company.get('job_text'))==0:
+                data['resume_match_warning']='Automatic resume selection had no keyword match; confirm this variant or choose No resume'
         if data["resume_variant_id"] is not None: resume.delivery_asset(ident(data["resume_variant_id"],"resume_variant_id"))
         return jsonify(jobs.enqueue("compose",data,request_key())),202
     @app.post('/api/drafts/manual')

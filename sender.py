@@ -32,7 +32,7 @@ def is_in_send_window(now=None):
     local = (now or config.now()).astimezone(config.TIMEZONE)
     return local.strftime("%a").lower() in config.SEND_DAYS and config.SEND_START_HOUR<=local.hour<config.SEND_END_HOUR
 
-def _send_one(server,to_email,subject,body,resume_path=None,company_name=None,in_reply_to=None,
+def build_message(to_email,subject,body,resume_path=None,company_name=None,in_reply_to=None,
               resume_url=None,attach_mode=None,message_id=None,asset=None):
     msg=EmailMessage()
     msg["Message-ID"]=message_id or make_msgid(domain="outreach.local")
@@ -59,6 +59,10 @@ def _send_one(server,to_email,subject,body,resume_path=None,company_name=None,in
                            filename=_get_personalized_attachment_name(company_name,resume_path))
     elif mode=="link" and resume_path and not resume_url:
         raise ValueError("Resume link is required in link mode")
+    return msg
+
+def _send_one(server,to_email,subject,body,**kwargs):
+    msg=build_message(to_email,subject,body,**kwargs)
     server.sendmail(config.GMAIL_ADDRESS,to_email,msg.as_bytes())
     return msg["Message-ID"]
 

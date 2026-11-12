@@ -45,6 +45,25 @@ def browser_app(temp_db,monkeypatch):
 def open_view(page,name):
     page.get_by_role("navigation").get_by_role("button",name=name,exact=True).click()
 
+def test_company_selector_reaches_later_pages_and_preserves_selection(browser_app,contact):
+    from repository import CompanyRepository,rows
+    for i in range(105): CompanyRepository.create(f'Z{i:03d}')
+    page,url,_,errors=browser_app
+    page.goto(url);open_view(page,'Contacts')
+    page.get_by_role('button',name='Add contact',exact=True).click()
+    page.get_by_role('button',name='Next company matches',exact=True).click()
+    page.get_by_label('Company',exact=True).select_option(label='Z104')
+    selected=page.get_by_label('Company',exact=True).input_value()
+    page.get_by_label('Find company',exact=True).fill('Example')
+    page.get_by_role('button',name='Find companies',exact=True).click()
+    expect(page.get_by_text('1 matches shown.',exact=False)).to_be_visible()
+    expect(page.get_by_label('Company',exact=True)).to_have_value(selected)
+    page.get_by_label('Email',exact=True).fill('later@example.test')
+    with page.expect_response(lambda r:r.url.endswith('/api/contacts') and r.request.method=='POST'):
+        page.get_by_role('dialog').get_by_role('button',name='Save',exact=True).click()
+    assert rows("SELECT company_id FROM contacts WHERE email='later@example.test'")[0]['company_id']==int(selected)
+    assert errors==[]
+
 def test_lost_enqueue_response_recovers_one_job_and_reload(browser_app):
     page,url,_,errors=browser_app
     page.goto(url)

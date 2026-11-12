@@ -134,11 +134,15 @@ function followupForm(original,setup){
     const form=el('div',{},field('Follow-up resume',variant));const dialog=modal('Draft follow-up',form);
     form.append(button('Generate follow-up',async()=>{const data={};if(variant.value!=='original')data.resume_variant_id=variant.value==='none'?null:Number(variant.value);await queued('/api/tracking/'+original.id+'/followup',data);dialog.close();}));
 }
-function contactForm(companies,person=null){
+async function contactForm(companies,person=null){
+    if(person&&!companies.some(c=>c.id===person.company_id))companies=[await api("/api/companies/"+person.company_id),...companies];
     if(!companies.length){toast("Add a company first in Companies.",true);return;}
     const company=select(companies.map(c=>[c.id,c.name]),person?.company_id||companies[0].id),name=input(person?.name),email=input(person?.email,"email"),role=input(person?.title),source=input(person?.source);
     company.disabled=!!person;
     const body=el("div",{},field("Company",company),field("Name",name),field("Email",email),field("Role / title",role),field("Source",source));
+    const search=input(),status=el('p',{},'Selected company is preserved while browsing matches.');let companyOffset=0,searchSerial=0,pageSize=companies.length;
+    async function loadCompanies(){const serial=++searchSerial;const found=await api('/api/companies?limit=100&offset='+companyOffset+'&search='+encodeURIComponent(search.value));if(serial!==searchSerial)return;const selected=company.value,label=company.selectedOptions[0]?.textContent;company.replaceChildren(...found.map(c=>option(c.id,c.name,String(c.id)===selected)));if(selected&&!found.some(c=>String(c.id)===selected))company.prepend(option(selected,label||'Selected company',true));pageSize=found.length;status.textContent='Company matches page '+(companyOffset/100+1)+'; '+found.length+' matches shown. Selected company preserved.';}
+    body.prepend(field('Find company',search),el('div',{class:'actions'},button('Find companies',async()=>{companyOffset=0;await loadCompanies();}),button('Previous company matches',async()=>{companyOffset=Math.max(0,companyOffset-100);await loadCompanies();}),button('Next company matches',async()=>{if(pageSize===100){companyOffset+=100;await loadCompanies();}})),status);
     const dialog=modal(person?"Edit contact":"Add contact",body);
     body.append(button("Save",async()=>{const values={name:name.value,email:email.value,title:role.value,source:source.value};if(!person)values.company_id=Number(company.value);await api(person?"/api/contacts/"+person.id:"/api/contacts",person?"PATCH":"POST",values);dialog.close();await render();},"primary"));
     if(person)body.append(button("Archive",async()=>{await api("/api/contacts/"+person.id,"PATCH",{archived:true});dialog.close();await render();},"danger"));
@@ -185,7 +189,7 @@ async function reviewView(){
     for(let draft of drafts){
         let writing=false,editSerial=0,save,reject;
         const subject=input(draft.subject),hook=input(draft.hook),body=el("textarea",{value:draft.body||"",rows:8});
-        const variant=select([[0,"No resume"],...setup.resumes.map(r=>[r.id,r.name])],draft.resume_variant_id||0);
+        const variant=select([[0,"No resume"],...(draft.resume_variant_id&&!setup.resumes.some(r=>r.id===draft.resume_variant_id)?[[draft.resume_variant_id,"Unavailable selected resume - choose a replacement or No resume"]]:[]),...setup.resumes.map(r=>[r.id,r.name])],draft.resume_variant_id||0);
         const warnings=el("p",{class:"warning"},draft.qc_warnings||"Review facts, recipient, content and resume before approving.");
         const status=el("p",{class:"muted"},"Revision "+draft.revision+" · Pending review · Sender: "+(setup.configuration.sender||"Configure Gmail before approving"));
         const approve=button("Approve saved revision",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"approve",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Approved. Available in Queue.");},true),"primary",()=>writing||dirty.has(draft.id)||(draft.opportunity_id&&!draft.evidence_verified_at));
@@ -212,7 +216,7 @@ async function reviewView(){
         function showAsset(){
             const selected=setup.resumes.find(r=>r.id===Number(variant.value));
             asset.replaceChildren(el("p",{class:"muted"},"Delivery mode: "+setup.configuration.resume_mode));
-            if(!selected)asset.append(el("p",{},"No resume selected."));
+            if(!selected)asset.append(el("p",{},Number(variant.value)?"Selected resume is unavailable. Choose a replacement or deliberately select No resume.":"No resume selected."));
             else if(setup.configuration.resume_mode==="link")asset.append(selected.resume_url?safeLink(selected.resume_url,"Open selected resume link"):el("p",{class:"warning"},"This variant needs an HTTPS link before approval."));
             else if(selected.file_path)asset.append(el("a",{href:"/api/resumes/"+selected.id+"/pdf",class:"button"},"Download selected PDF"));
             else asset.append(el("p",{class:"warning"},"This variant needs a PDF before approval."));
@@ -229,6 +233,7 @@ async function reviewView(){
         }),"",()=>writing);
         reject=button("Reject",()=>writeReview(async()=>{await api("/api/review/"+draft.id,"POST",{action:"reject",revision:draft.revision});dirty.delete(draft.id);section.remove();toast("Draft rejected.");},true),"danger",()=>writing);
         section.append(el("div",{class:"actions"},save,approve,reject,button("Regenerate",async()=>{if(dirty.has(draft.id)){toast("Save your edits before regenerating.",true);return;}if(!confirm("Replace this draft with AI output? Manual edits will be replaced only if generation succeeds; review and approval will be required again."))return;await queued("/api/review/"+draft.id+"/regenerate",{revision:draft.revision,resume_variant_id:Number(variant.value)||null});})));
+        section.append(button('Preview final email',async()=>{if(dirty.has(draft.id))throw new Error('Save edits before previewing the final email.');const preview=await api('/api/review/'+draft.id+'/preview');modal('Final email preview',el('div',{},el('p',{},'From: '+preview.sender),el('p',{},'To: '+preview.recipient),el('p',{},'Subject: '+preview.subject),el('pre',{},preview.body),el('p',{},'Attachments: '+(preview.attachments.join(', ')||'None'))));}));
         syncActions();
         root.append(section);
     }
@@ -269,6 +274,11 @@ async function trackingView(){
     }
     paginate(root,"Tracking",tracked);return root;
 }
+function resumeForm(resume,refresh){
+    const name=input(resume.name),keywords=input(resume.keywords),url=input(resume.resume_url,'url'),file=el('input',{type:'file',accept:'.pdf'});
+    const form=el('div',{},field('Variant name',name),field('Keywords',keywords),field('Resume URL',url),field('Replacement PDF (optional)',file));const dialog=modal('Edit resume variant',form);
+    form.append(button('Save resume variant',async()=>{let id=resume.id;if(file.files.length){const data=new FormData();data.append('file',file.files[0]);data.append('name',name.value);data.append('keywords',keywords.value);data.append('resume_url',url.value);await api('/api/resumes/'+id+'/replace','POST',data);}else await api('/api/resumes/'+id,'PATCH',{name:name.value,keywords:keywords.value,resume_url:url.value});await refresh();dialog.close();toast('Resume updated. Affected drafts require review again.');},'primary'));
+}
 async function settingsView(){
     const setup=await api("/api/settings");settingsCache=setup;
     const readiness=el("p",{},Object.entries(setup.readiness).map(([key,ready])=>key+": "+(ready?"configured":"needed")).join(" · "));
@@ -281,7 +291,8 @@ async function settingsView(){
     const resumeList=el("div",{}),suppressionList=el("div",{});
     let listSerial=0;
     function showLists(data){
-        resumeList.replaceChildren(table(["Name","Keywords","Link"],data.resumes.map(r=>el("tr",{},cell(r.name,true),cell(r.keywords,true),cell(r.resume_url?safeLink(r.resume_url,"Open resume link"):"PDF registered")))));
+        const resumeRows=data.resumes.map(r=>{const actions=el('div',{class:'actions'},button('Edit or replace',()=>resumeForm(r,refreshLists)),button('Archive resume',async()=>{await api('/api/resumes/'+r.id,'DELETE',{});await refreshLists();}));return el('tr',{},cell(r.name,true),cell(r.keywords,true),cell(r.resume_url?safeLink(r.resume_url,'Open resume link'):'PDF registered'),cell(actions));});
+        resumeList.replaceChildren(table(['Name','Keywords','Link','Actions'],resumeRows));
         suppressionList.replaceChildren(table(["Address","Reason","Actions"],data.suppressions.map(r=>el("tr",{},cell(r.email),cell(r.reason,true),cell(button("Remove suppression",async()=>{await api("/api/suppressions","DELETE",{email:r.email});await refreshLists();}))))));
     }
     async function refreshLists(){const serial=++listSerial;const data=await api("/api/settings");if(serial===listSerial){settingsCache=data;showLists(data);}}

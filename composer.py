@@ -267,7 +267,7 @@ def _preflight(company_id,contact_id,context,variant_id):
         resume.delivery_asset(variant_id)
     return company,contact
 
-def compose_and_store(company_id,contact_id,candidate_context=None,resume_variant_id=None,opportunity_id=None):
+def compose_and_store(company_id,contact_id,candidate_context=None,resume_variant_id=None,opportunity_id=None,resume_match_warning=None):
     candidate=candidate_profile.get_settings()
     if candidate_context is None:
         candidate_context=candidate["candidate_context"]
@@ -277,6 +277,7 @@ def compose_and_store(company_id,contact_id,candidate_context=None,resume_varian
     _build_signature(profile)
     company,contact=_preflight(company_id,contact_id,candidate_context,resume_variant_id)
     company,candidate_context,inputs=capture_inputs(company,contact,profile,candidate_context,opportunity_id)
+    inputs['resume_selection']={'id':resume_variant_id,'warning':resume_match_warning}
     key="generation:"+contact["email"].strip().lower()
     token=_reserve(key)
     try:
@@ -292,7 +293,7 @@ def compose_and_store(company_id,contact_id,candidate_context=None,resume_varian
         # Revalidate suppression/relationship following the slow provider call.
         _preflight(company_id,contact_id,candidate_context,resume_variant_id)
         return EmailRepository.create(company_id,contact_id,resume_variant_id,result["hook"],result["subject"],body,
-            "; ".join(dict.fromkeys(qc.warnings(result["subject"],body)+generated.get("quality_warnings",[])+snapshot_warning(inputs,generated))),research_notes=result["research_notes"],
+            "; ".join(dict.fromkeys(qc.warnings(result["subject"],body)+generated.get("quality_warnings",[])+snapshot_warning(inputs,generated)+([resume_match_warning] if resume_match_warning else []))),research_notes=result["research_notes"],
             grounding_json=json.dumps(generated.get("grounding",[])),opportunity_id=opportunity_id,input_snapshot=inputs)
     finally:
         _release(key,token)
