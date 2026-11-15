@@ -62,8 +62,14 @@ def saved_status():
     from repository import one
     row=one("SELECT value FROM settings WHERE key='mail_connection_check'")
     if not row: return {'smtp':'not_verified','imap':'not_verified'}
-    report=json.loads(row['value'])
+    invalid={'smtp':'not_verified','imap':'not_verified','action':'Saved connection check is invalid; run Check mail connections again.'}
+    try: report=json.loads(row['value'])
+    except (ValueError,TypeError): return invalid
+    if not isinstance(report,dict) or not isinstance(report.get('scope'),str): return invalid
     if report.get('scope')!=scope(): return {'smtp':'configuration_changed','imap':'configuration_changed'}
+    statuses={'not_configured','invalid_configuration','verified','connection_rejected','authentication_failed','connection_failed','mailbox_unavailable','authentication_or_mailbox_failed'}
+    if not isinstance(report.get('checked_at'),str) or not report['checked_at']: return invalid
+    if any(not isinstance(report.get(key),dict) or not isinstance(report[key].get('status'),str) or report[key]['status'] not in statuses for key in ('smtp','imap')): return invalid
     return {key:report[key]['status'] for key in ('smtp','imap')}|{'checked_at':report['checked_at']}
 
 def check_and_save():

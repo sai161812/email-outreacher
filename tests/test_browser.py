@@ -473,3 +473,13 @@ def test_responsive_keyboard_dialog(browser_app,width):
     Path("test-results").mkdir(exist_ok=True)
     page.screenshot(path=f"test-results/responsive-{width}.png",full_page=True)
     assert errors==[]
+
+def test_settings_recovers_from_invalid_diagnostic_cache(browser_app):
+    from db import get_connection
+    with get_connection() as conn: conn.execute("INSERT INTO settings(key,value) VALUES ('mail_connection_check','null')")
+    page,url,smtp,errors=browser_app
+    page.goto(url);open_view(page,'Settings')
+    expect(page.get_by_text('Connection checks: SMTP not_verified; IMAP not_verified.',exact=False)).to_be_visible()
+    expect(page.get_by_role('button',name='Check mail connections (no sending)',exact=True)).to_be_enabled()
+    assert errors==[]
+    smtp.sendmail.assert_not_called()

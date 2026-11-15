@@ -44,3 +44,17 @@ def test_saved_results_are_scoped_to_account(temp_db,monkeypatch):
 def test_unconfigured_model_check_makes_zero_calls(monkeypatch):
     monkeypatch.setattr(config,'GEMINI_API_KEY','')
     assert account_checks.check_model()['calls']==0
+
+import pytest
+@pytest.mark.parametrize('value',['{','null','[]','{}','scoped_missing','scoped_bad_status'])
+def test_invalid_cached_diagnostics_leave_settings_available(temp_db,monkeypatch,value):
+    from db import get_connection
+    from app import create_app
+    monkeypatch.setattr(config,'GMAIL_ADDRESS','owner@example.test');monkeypatch.setattr(config,'GMAIL_APP_PASSWORD','synthetic')
+    if value.startswith('scoped_'):
+        value=json.dumps({'scope':account_checks.scope(),**({'checked_at':'2026-11-16','smtp':{'status':[]},'imap':{'status':'verified'}} if value=='scoped_bad_status' else {})})
+    with get_connection() as conn: conn.execute("INSERT INTO settings(key,value) VALUES ('mail_connection_check',?)",(value,))
+    response=create_app({'TESTING':True}).test_client().get('/api/settings')
+    assert response.status_code==200
+    result=response.get_json()['connection_verification']
+    assert result['smtp']==result['imap']=='not_verified' and 'again' in result['action']
