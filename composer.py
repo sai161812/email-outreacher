@@ -298,16 +298,20 @@ def compose_and_store(company_id,contact_id,candidate_context=None,resume_varian
     finally:
         _release(key,token)
 
-def compose_follow_up(original_email_id,context=None):
+def followup_request(original,company,contact,context):
+    return json.dumps({"original_subject":original["subject"],"original_body":original["body"],
+        "company_name":company["name"],"recipient_title":contact.get("title"),"audience_guidance":_audience_guidance(contact),
+        "verified_candidate_facts":context},ensure_ascii=False)
+
+
+def compose_follow_up(original_email_id,context=None,request=None):
     original=EmailRepository.get_by_id(original_email_id)
     if not original:
         from errors import NotFound
         raise NotFound("Original email not found")
     contact=contacts.get_contact(original["contact_id"])
     company=contacts.get_company(original["company_id"])
-    return _generate(json.dumps({"original_subject":original["subject"],"original_body":original["body"],
-        "company_name":company["name"],"recipient_title":contact.get("title"),"audience_guidance":_audience_guidance(contact),
-        "verified_candidate_facts":context or candidate_context()},ensure_ascii=False),FollowUpDraft,FOLLOW_UP_SYSTEM_PROMPT)
+    return _generate(request if request is not None else followup_request(original,company,contact,context or candidate_context()),FollowUpDraft,FOLLOW_UP_SYSTEM_PROMPT)
 
 def compose_follow_up_and_store(original_email_id,resume_variant_id=UNSET):
     original=EmailRepository.get_by_id(original_email_id)
@@ -325,6 +329,7 @@ def compose_follow_up_and_store(original_email_id,resume_variant_id=UNSET):
     company=contacts.get_company(original['company_id'])
     company,context,inputs=capture_inputs(company,contact,profile,context,original['opportunity_id'])
     inputs['original']={k:original[k] for k in ('id','subject','body')}
+    inputs['request']=followup_request(original,company,contact,context)
     root=original["thread_root_id"] or original["id"]
     key=f"generation:followup:{root}"
     token=_reserve(key)
@@ -332,7 +337,7 @@ def compose_follow_up_and_store(original_email_id,resume_variant_id=UNSET):
         proposed={**original,"follow_up_to_email_id":original_email_id}
         with get_connection() as conn:
             followups.check(conn,proposed)
-        generated=compose_follow_up(original_email_id,context)
+        generated=compose_follow_up(original_email_id,context,inputs['request'])
         result=FollowUpDraft.model_validate(generated).model_dump()
         # Thread headers provide linkage even when a prefix would overflow the
         # subject limit. Preserve the reviewed original rather than truncate it.
@@ -345,7 +350,7 @@ def compose_follow_up_and_store(original_email_id,resume_variant_id=UNSET):
         with get_connection() as conn:
             followups.check(conn,proposed)
         return EmailRepository.create(original["company_id"],original["contact_id"],variant,
-            original["hook"],subject,body,"; ".join(dict.fromkeys(qc.warnings(subject,body,True)+generated.get("quality_warnings",[]))),original_email_id,
+            original["hook"],subject,body,"; ".join(dict.fromkeys(qc.warnings(subject,body,True)+generated.get("quality_warnings",[])+snapshot_warning(inputs,generated))),original_email_id,
             original.get("research_notes"),opportunity_id=original['opportunity_id'],input_snapshot={**inputs,'generation':generated.get('generation')})
     finally:
         _release(key,token)
@@ -383,11 +388,12 @@ def regenerate(email_id,revision,resume_variant_id=UNSET):
     if original['follow_up_to_email_id']:
         parent=EmailRepository.get_by_id(original['follow_up_to_email_id'])
         inputs['original']={k:parent[k] for k in ('id','subject','body')}
+        inputs['request']=followup_request(parent,company,contact,context)
     key='generation:'+contact['email'].strip().lower();token=_reserve(key)
     try:
         is_followup=bool(original['follow_up_to_email_id'])
         with get_connection() as conn: followups.check(conn,original,for_existing=True)
-        generated=compose_follow_up(original['follow_up_to_email_id'],context) if is_followup else compose_email(company,contact,context)
+        generated=compose_follow_up(original['follow_up_to_email_id'],context,inputs['request']) if is_followup else compose_email(company,contact,context)
         parsed=(FollowUpDraft if is_followup else EmailDraft).model_validate(generated)
         subject=original['subject'] if is_followup else parsed.subject
         body=_body(parsed.body,contact,candidate['profile'])
