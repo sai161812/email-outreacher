@@ -64,12 +64,13 @@ def restore_bundle(bundle,output,resume_output):
     if target==assets or target.is_relative_to(assets) or assets.is_relative_to(target):
         raise ValueError("Choose separate database and resume destinations")
     manifest=json.loads((source/"manifest.json").read_text(encoding="utf8"))
-    if manifest.get("version")!=1: raise ValueError("Unsupported bundle")
+    if not isinstance(manifest,dict) or manifest.get("version")!=1 or not isinstance(manifest.get('assets'),list): raise ValueError("Unsupported bundle")
     database=(source/"database.sqlite").read_bytes()
     if hashlib.sha256(database).hexdigest()!=manifest["database_sha256"]: raise ValueError("Database checksum mismatch")
     checked=[]
     seen=set()
     for item in manifest["assets"]:
+        if not isinstance(item,dict) or not {'file','id','sha256'}<=item.keys(): raise ValueError('Invalid asset manifest')
         name=item["file"]
         rid=item['id']
         if type(rid) is not int or rid<1 or rid in seen or name!=f"resume-{rid}.pdf":
@@ -79,6 +80,19 @@ def restore_bundle(bundle,output,resume_output):
         if len(data)>config.MAX_RESUME_BYTES: raise ValueError("Resume exceeds size limit")
         if hashlib.sha256(data).hexdigest()!=item["sha256"]: raise ValueError("Resume checksum mismatch")
         checked.append((item["id"],name,data))
+    # Validate the database and complete asset coverage before publishing either
+    # destination. A valid checksum alone says nothing about portability.
+    with tempfile.TemporaryDirectory(prefix='outreach-restore-check-') as temporary:
+        staged=Path(temporary)/'database.sqlite'
+        staged.write_bytes(database)
+        try:
+            with closing(sqlite3.connect(staged)) as conn:
+                if conn.execute('PRAGMA integrity_check').fetchall()!=[('ok',)] or conn.execute('PRAGMA foreign_key_check').fetchall():
+                    raise ValueError('Restored database failed integrity or foreign-key check')
+                required={row[0] for row in conn.execute("SELECT id FROM resume_variants WHERE file_path IS NOT NULL AND file_path<>''")}
+                if required!=seen: raise ValueError('Asset manifest does not match database references')
+        except sqlite3.Error as exc:
+            raise ValueError('Invalid bundle database') from exc
     target.parent.mkdir(parents=True,exist_ok=True)
     assets.mkdir(parents=True,exist_ok=False)
     # Exclusive creation never overwrites an existing database.
