@@ -16,8 +16,8 @@ Neither check sends email. [Live acceptance](docs/LIVE_ACCEPTANCE.md) must still
 record a reviewed, owner-authorized message to an owner-designated recipient,
 actual receipt/authentication/assets and a real matched reply. Missing account
 setup is never counted as passing. The current verification record is
-[MILESTONE_5.md](docs/MILESTONE_5.md): 303 tests pass on application source
-`3b034536047c`; R16 live acceptance and R11 human/live quality acceptance remain
+[REVIEW_FIX_VERIFICATION.md](docs/REVIEW_FIX_VERIFICATION.md): all four review gaps
+are resolved, with 325 passing tests. R16 live acceptance and R11 human/live quality acceptance remain
 pending. The project is not fully accepted for live outreach yet.
 
 See [product acceptance and startup](docs/PRODUCT_READINESS.md) for the tested workflow scope and remaining account setup. If you previously used the UI-only preview, start fresh terminals so preview path overrides do not carry into normal operation.

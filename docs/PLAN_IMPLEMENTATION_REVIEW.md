@@ -1,5 +1,11 @@
 # Implementation review and fix plan
 
+**Resolution update — 16 November 2026:** F01–F04 are implemented and covered by
+regression tests. See [fix verification](REVIEW_FIX_VERIFICATION.md) for current
+release/check results. The findings and proposed sequence below preserve the
+15 November review baseline. Resume setup remains deferred; R11/R16 live
+acceptance remains pending independently of these resolved software gaps.
+
 Reviewed 15 November 2026 against `59feb8d`, using
 [RELIABILITY_AND_HIRING_PLAN.md](RELIABILITY_AND_HIRING_PLAN.md).
 This is a review and proposed fix sequence, not an implementation of the fixes.

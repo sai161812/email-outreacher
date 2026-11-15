@@ -1,10 +1,10 @@
 # Product acceptance and startup
 
-The current verification record is [Milestone 5](MILESTONE_5.md), with structured
-results in [milestone5_verification.json](audit/2026-11-12/milestone5_verification.json).
-Application source **3b034536047c** passed **303 tests**, including 20 Chromium
-cases, on 12 November 2026. The exact committed archive installed cleanly; source,
-dependency, worker recovery, schema 7 and backup/asset restore checks pass.
+The current verification record is [review fix verification](REVIEW_FIX_VERIFICATION.md).
+All F01–F04 review gaps are resolved, with **325 tests** passing, including 21
+Chromium cases. The corrected source archive **a0c29f8c0a47** installed cleanly;
+source, dependency, worker recovery, schema 7 and backup/asset restore checks pass.
+Earlier Milestone 5 evidence remains in [MILESTONE_5.md](MILESTONE_5.md).
 
 Milestone 5 software is implemented. **R16 live acceptance is pending**, so neither
 Milestone 5 nor the overall plan is fully accepted. Gmail/Gemini are unconfigured,

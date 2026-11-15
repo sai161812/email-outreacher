@@ -6,7 +6,8 @@ Review update, 15 November 2026: [implementation review and fix plan](PLAN_IMPLE
 records a fresh 303-test pass and four reproduced follow-up gaps in restore
 validation, follow-up evidence, diagnostic cache handling and launcher state
 handling. Earlier milestone verification below remains historical evidence;
-these new gaps are open. The personal resume update remains deferred at the
+these gaps were resolved on 16 November; see [fix verification](REVIEW_FIX_VERIFICATION.md).
+The personal resume update remains deferred at the
 owner's request. R11 and R16 live acceptance are still pending.
 
 Milestone 1 is complete under the revised scope, with 231 passing tests; see
