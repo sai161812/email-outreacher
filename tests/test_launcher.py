@@ -39,6 +39,11 @@ def test_launcher_start_status_stop_and_duplicate_guard(tmp_path):
             else: pytest.fail('Launcher did not become ready')
             with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/session',timeout=5) as response:
                 assert response.status==200
+            saved=__import__('json').loads(state.read_text())
+            for raw in (b'null',b'[]',b'{',__import__('json').dumps({'token':saved['token'],'action':[]}).encode(),__import__('json').dumps({'token':chr(9731),'action':'status'}).encode()):
+                with socket.create_connection(('127.0.0.1',saved['control_port']),timeout=3) as client:
+                    client.sendall(raw+b'\n');client.recv(4096)
+            assert run.control(state,'status')['status']=='running'
             duplicate=subprocess.run([sys.executable,'run.py','start','--port',str(port)],cwd=ROOT,env=env,capture_output=True,text=True,timeout=10)
             assert duplicate.returncode!=0 and 'already owns' in duplicate.stderr
             with closing(sqlite3.connect(env['OUTREACH_DB_PATH'])) as conn,conn:
@@ -93,3 +98,9 @@ def test_managed_child_exits_when_parent_pipe_closes(monkeypatch):
     monkeypatch.setattr(parent_watch.os,'_exit',lambda code:exited.set())
     parent_watch.watch_parent()
     assert exited.wait(2)
+
+@pytest.mark.parametrize('value',['null','[]','{','{}','{"control_port":true,"token":"x"}','{"control_port":70000,"token":"x"}'])
+def test_malformed_launcher_state_is_actionable(tmp_path,value):
+    state=tmp_path/'state.json';state.write_text(value)
+    result=run.control(state,'status')
+    assert result['status']=='unavailable' and 'logs' in result['note']

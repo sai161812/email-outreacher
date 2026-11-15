@@ -22,12 +22,16 @@ def control(path,action):
     if not path.is_file(): return {'status':'not_running'}
     try:
         state=json.loads(path.read_text(encoding='utf8'))
+        if not isinstance(state,dict) or type(state.get('control_port')) is not int or not 1<=state['control_port']<=65535 or not isinstance(state.get('token'),str) or not state['token']:
+            raise ValueError('Invalid launcher state')
         with socket.create_connection(('127.0.0.1',state['control_port']),timeout=3) as sock:
             sock.settimeout(3)
             sock.sendall((json.dumps({'token':state['token'],'action':action})+'\n').encode())
             response=sock.makefile('rb').readline(4096)
-        return json.loads(response)
-    except (OSError,ValueError,KeyError): return {'status':'not_running','note':'No authenticated supervisor response; no process was killed.'}
+        result=json.loads(response)
+        if not isinstance(result,dict) or result.get('status') not in ('running','stopping'): raise ValueError('Invalid supervisor response')
+        return result
+    except (OSError,ValueError,KeyError): return {'status':'unavailable','note':'No valid supervisor response. Check launcher logs and configuration before retrying; no process was killed.'}
 
 def start(database,port):
     from filelock import FileLock,Timeout
@@ -80,9 +84,10 @@ def start(database,port):
                     client.settimeout(1)
                     try:
                         request=json.loads(client.makefile('rb').readline(4096))
-                        if not secrets.compare_digest(str(request.get('token','')),token): continue
+                        if not isinstance(request,dict) or not isinstance(request.get('token'),str): continue
+                        if not secrets.compare_digest(request['token'].encode(),token.encode()): continue
                         action=request.get('action')
-                        if action not in {'status','stop'}: continue
+                        if action not in ('status','stop'): continue
                         client.sendall((json.dumps({'status':'stopping' if action=='stop' else 'running','port':port,'server_pid':server.pid,'worker_pid':worker.pid})+'\n').encode())
                         if action=='stop': stopped.set()
                     except (OSError,ValueError): pass
