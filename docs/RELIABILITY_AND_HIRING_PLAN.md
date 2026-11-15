@@ -2,6 +2,13 @@
 
 Prepared 11 November 2026 against `main` at `fe2bec9`.
 
+Review update, 15 November 2026: [implementation review and fix plan](PLAN_IMPLEMENTATION_REVIEW.md)
+records a fresh 303-test pass and four reproduced follow-up gaps in restore
+validation, follow-up evidence, diagnostic cache handling and launcher state
+handling. Earlier milestone verification below remains historical evidence;
+these new gaps are open. The personal resume update remains deferred at the
+owner's request. R11 and R16 live acceptance are still pending.
+
 Milestone 1 is complete under the revised scope, with 231 passing tests; see
 [MILESTONE_1.md](MILESTONE_1.md). At the owner's request, personal resume
 registration and candidate-facts review are deferred to Milestone 5 / R16,
