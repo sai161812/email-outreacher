@@ -1,4 +1,4 @@
-﻿import json
+import json
 import pytest
 import composer,opportunities,db
 from repository import EmailRepository

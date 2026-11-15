@@ -1,4 +1,5 @@
-﻿import hashlib,json,sqlite3
+import hashlib,json,sqlite3
+from contextlib import closing
 import pytest
 import config
 from conftest import pdf_bytes
@@ -21,7 +22,7 @@ def test_restore_rejects_incomplete_bundle_before_outputs(contact,tmp_path,damag
         (bundle/'database.sqlite').write_bytes(b'invalid')
         manifest['database_sha256']=hashlib.sha256(b'invalid').hexdigest()
     else:
-        with __import__('contextlib').closing(sqlite3.connect(bundle/'database.sqlite')) as conn,conn: conn.execute("INSERT INTO contacts(company_id,email) VALUES (999,'fake@example.test')")
+        with closing(sqlite3.connect(bundle/'database.sqlite')) as conn,conn: conn.execute("INSERT INTO contacts(company_id,email) VALUES (999,'fake@example.test')")
         manifest['database_sha256']=hashlib.sha256((bundle/'database.sqlite').read_bytes()).hexdigest()
     (bundle/'manifest.json').write_text(json.dumps(manifest))
     with pytest.raises(ValueError): restore_bundle(bundle,tmp_path/'restored.db',tmp_path/'assets')
