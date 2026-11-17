@@ -186,7 +186,7 @@ async function targetForm(companies,projects,target=null){
     const company=select(companies.map(c=>[c.id,c.name]),target?.company_id||companies[0].id);company.disabled=!!target;
     const nodes={};
     for(const key of ['role','level','role_url','requisition','application_date','constraints','relationship','company_source','source_verified_date','approach'])nodes[key]=input(target?.[key]||'',key.endsWith('date')?'date':key.includes('url')||key==='company_source'?'url':'text');
-    nodes.level.value=target?.level||'Internship';
+    nodes.level.value=target?(target.level||''):'Internship';
     nodes.constraints.placeholder='Verified availability dates, duration, location and eligibility';
     nodes.role.placeholder='e.g. Software Engineering Intern';
     nodes.application_status=select([['unknown','Unknown'],['not_applied','Not applied'],['applied','Applied (owner confirmed)']],target?.application_status||'unknown');

@@ -1,5 +1,10 @@
 # Email Outreacher
 
+Primarily for internship outreach: follow the [internship workflow and current
+local readiness](docs/INTERNSHIP_WORKFLOW.md). On this checkout, Windows Application
+Control currently blocks Python startup; the guide records the required runtime
+repair separately from passing source/CI checks.
+
 A single-owner Flask dashboard for manual contact management, Gemini-assisted drafting, explicit review, Gmail SMTP delivery, and reply tracking. Python **3.12** is supported. The app defaults to loopback access and never schedules sending automatically.
 
 After locked installation, start both local processes with
