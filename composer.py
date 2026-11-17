@@ -19,7 +19,7 @@ from repository import EmailRepository,SuppressionRepository,timestamp
 
 MAX_GENERATION_CALLS=3
 UNSET=object()
-PROMPT_VERSION='outreach-evidence-v1'
+PROMPT_VERSION='outreach-internship-v2'
 
 
 def capture_inputs(company,contact,profile,context,opportunity_id=None):
@@ -68,9 +68,14 @@ FACTS AND RELEVANCE
   seniority, education/year, availability, location, work authorization, referrals, applications,
   previous conversations, familiarity with a product, or achievements. Preserve qualifiers such as
   coursework, prototype, personal project, or team contribution; do not turn these into paid experience.
-- Use the target role and seniority stated in the candidate facts. Do not force an internship or
-  student identity. If the target is missing, describe the supported area of work without inventing
-  a job title or vacancy; note the missing target in research_notes.
+- This tool primarily supports internship outreach. Use the selected role and level first,
+  otherwise the target in candidate facts. When neither is supplied, ask about internships
+  in the supported area without implying a named vacancy exists. Internship intent does not
+  establish student status: never invent enrollment, graduation dates or eligibility.
+- For internship targets, use one relevant coursework, personal or team project and the actual
+  contribution. Mention availability, duration, location and work authorization only if supplied.
+  Flag missing eligibility or timing information in research_notes. Respect the application
+  route and never imply an application was submitted without owner confirmation.
 - Job text supplies employer needs, NEVER evidence that the candidate has those skills. Use up to
   3 natural role keywords supported by BOTH the job/company context and candidate facts; no minimum.
   Prefer concrete skill names and action verbs to a technology list; no keyword stuffing or ATS claims.

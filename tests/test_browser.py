@@ -483,3 +483,25 @@ def test_settings_recovers_from_invalid_diagnostic_cache(browser_app):
     expect(page.get_by_role('button',name='Check mail connections (no sending)',exact=True)).to_be_enabled()
     assert errors==[]
     smtp.sendmail.assert_not_called()
+
+
+def test_internship_target_can_select_company_beyond_first_500(browser_app):
+    from db import get_connection
+    from repository import rows
+    with get_connection() as conn:
+        conn.executemany('INSERT INTO companies(name) VALUES (?)',[(f'Company {i:04d}',) for i in range(505)])
+    page,url,_,errors=browser_app
+    page.goto(url);open_view(page,'Targets')
+    page.get_by_role('button',name='Add role brief',exact=True).click()
+    expect(page.get_by_label('level',exact=True)).to_have_value('Internship')
+    page.get_by_label('Find company',exact=True).fill('Company 0504')
+    page.get_by_role('button',name='Find companies',exact=True).click()
+    expect(page.get_by_text('1 matches shown.',exact=False)).to_be_visible()
+    page.get_by_label('Company',exact=True).select_option(label='Company 0504')
+    page.get_by_label('role',exact=True).fill('Software Engineering Intern')
+    with page.expect_response(lambda r:r.url.endswith('/api/opportunities') and r.request.method=='POST'):
+        page.get_by_role('button',name='Save role brief',exact=True).click()
+    assert rows('SELECT o.role,c.name FROM opportunities o JOIN companies c ON c.id=o.company_id')[0]=={'role':'Software Engineering Intern','name':'Company 0504'}
+    page.get_by_role('button',name='Edit role brief',exact=True).click()
+    expect(page.get_by_label('Company',exact=True)).to_have_value(str(rows("SELECT id FROM companies WHERE name='Company 0504'")[0]['id']))
+    assert errors==[]

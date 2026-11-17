@@ -147,15 +147,18 @@ function followupForm(original,setup){
     const form=el('div',{},field('Follow-up resume',variant));const dialog=modal('Draft follow-up',form);
     form.append(button('Generate follow-up',async()=>{const data={};if(variant.value!=='original')data.resume_variant_id=variant.value==='none'?null:Number(variant.value);await queued('/api/tracking/'+original.id+'/followup',data);dialog.close();}));
 }
+function companySearch(body,company,companies){
+    const search=input(),status=el('p',{},'Selected company is preserved while browsing matches.');let companyOffset=0,searchSerial=0,pageSize=companies.length;
+    async function loadCompanies(){const serial=++searchSerial;const found=await api('/api/companies?limit=100&offset='+companyOffset+'&search='+encodeURIComponent(search.value));if(serial!==searchSerial)return;const selected=company.value,label=company.selectedOptions[0]?.textContent;company.replaceChildren(...found.map(c=>option(c.id,c.name,String(c.id)===selected)));if(selected&&!found.some(c=>String(c.id)===selected))company.prepend(option(selected,label||'Selected company',true));pageSize=found.length;status.textContent='Company matches page '+(companyOffset/100+1)+'; '+found.length+' matches shown. Selected company preserved.';}
+    body.prepend(field('Find company',search),el('div',{class:'actions'},button('Find companies',async()=>{companyOffset=0;await loadCompanies();}),button('Previous company matches',async()=>{companyOffset=Math.max(0,companyOffset-100);await loadCompanies();}),button('Next company matches',async()=>{if(pageSize===100){companyOffset+=100;await loadCompanies();}})),status);
+}
 async function contactForm(companies,person=null){
     if(person&&!companies.some(c=>c.id===person.company_id))companies=[await api("/api/companies/"+person.company_id),...companies];
     if(!companies.length){toast("Add a company first in Companies.",true);return;}
     const company=select(companies.map(c=>[c.id,c.name]),person?.company_id||companies[0].id),name=input(person?.name),email=input(person?.email,"email"),role=input(person?.title),source=input(person?.source);
     company.disabled=!!person;
     const body=el("div",{},field("Company",company),field("Name",name),field("Email",email),field("Role / title",role),field("Source",source));
-    const search=input(),status=el('p',{},'Selected company is preserved while browsing matches.');let companyOffset=0,searchSerial=0,pageSize=companies.length;
-    async function loadCompanies(){const serial=++searchSerial;const found=await api('/api/companies?limit=100&offset='+companyOffset+'&search='+encodeURIComponent(search.value));if(serial!==searchSerial)return;const selected=company.value,label=company.selectedOptions[0]?.textContent;company.replaceChildren(...found.map(c=>option(c.id,c.name,String(c.id)===selected)));if(selected&&!found.some(c=>String(c.id)===selected))company.prepend(option(selected,label||'Selected company',true));pageSize=found.length;status.textContent='Company matches page '+(companyOffset/100+1)+'; '+found.length+' matches shown. Selected company preserved.';}
-    body.prepend(field('Find company',search),el('div',{class:'actions'},button('Find companies',async()=>{companyOffset=0;await loadCompanies();}),button('Previous company matches',async()=>{companyOffset=Math.max(0,companyOffset-100);await loadCompanies();}),button('Next company matches',async()=>{if(pageSize===100){companyOffset+=100;await loadCompanies();}})),status);
+    companySearch(body,company,companies);
     const dialog=modal(person?"Edit contact":"Add contact",body);
     body.append(button("Save",async()=>{const values={name:name.value,email:email.value,title:role.value,source:source.value};if(!person)values.company_id=Number(company.value);await api(person?"/api/contacts/"+person.id:"/api/contacts",person?"PATCH":"POST",values);dialog.close();await render();},"primary"));
     if(person)body.append(button("Archive",async()=>{await api("/api/contacts/"+person.id,"PATCH",{archived:true});dialog.close();await render();},"danger"));
@@ -177,15 +180,20 @@ async function targetsView(){
     root.append(card('Your projects',projects.map(p=>el('p',{},p.name+': '+p.action+' / '+(p.result||'No measured result')))));
     return root;
 }
-function targetForm(companies,projects,target=null){
+async function targetForm(companies,projects,target=null){
+    if(target&&!companies.some(c=>c.id===target.company_id))companies=[await api("/api/companies/"+target.company_id),...companies];
     if(!companies.length){toast('Add a company first.',true);return;}
     const company=select(companies.map(c=>[c.id,c.name]),target?.company_id||companies[0].id);company.disabled=!!target;
     const nodes={};
     for(const key of ['role','level','role_url','requisition','application_date','constraints','relationship','company_source','source_verified_date','approach'])nodes[key]=input(target?.[key]||'',key.endsWith('date')?'date':key.includes('url')||key==='company_source'?'url':'text');
+    nodes.level.value=target?.level||'Internship';
+    nodes.constraints.placeholder='Verified availability dates, duration, location and eligibility';
+    nodes.role.placeholder='e.g. Software Engineering Intern';
     nodes.application_status=select([['unknown','Unknown'],['not_applied','Not applied'],['applied','Applied (owner confirmed)']],target?.application_status||'unknown');
     nodes.project_id=select([['','No selected project'],...projects.map(p=>[p.id,p.name])],target?.project_id||'');
     nodes.job_text=el('textarea',{rows:6,value:target?.job_text||''});
     const form=el('div',{},field('Company',company),Object.entries(nodes).map(([k,n])=>field(k.replaceAll('_',' '),n)));
+    if(!target)companySearch(form,company,companies.slice(0,100));
     const dialog=modal(target?'Edit role brief':'Add role brief',form);
     form.append(button('Save role brief',async()=>{const data=Object.fromEntries(Object.entries(nodes).map(([k,n])=>[k,n.value]));if(!target)data.company_id=Number(company.value);await api(target?'/api/opportunities/'+target.id:'/api/opportunities',target?'PATCH':'POST',data);dialog.close();await render();},'primary'));
 }
