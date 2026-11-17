@@ -35,6 +35,12 @@ The prior release passed 325 tests and Windows/Linux CI. This update adds a real
 browser regression for selecting and editing a role at company 505, plus the
 internship default. JavaScript syntax and whitespace checks pass locally.
 
+Final source `224f626cd7d50946bb4893858296f6213c659d82` passed both Windows and
+Linux [CI run 44091029670](https://github.com/sai161812/email-outreacher/actions/runs/44091029670):
+full regression/browser tests, source checks, dependency advisories, source
+packaging and clean-release runtime installation. These remote results do not
+remove this machine's Application Control restriction.
+
 On 17 November, Windows Application Control blocks this checkout's `.venv`
 Python executable even for `--version`, including outside the sandbox. No policy
 was disabled or executable renamed to bypass the restriction. Local startup and
